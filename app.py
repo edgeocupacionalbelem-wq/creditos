@@ -1,29 +1,51 @@
-import json
+
 import os
 import re
 from collections import defaultdict
 from datetime import datetime
-from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, flash
 from werkzeug.utils import secure_filename
 from openpyxl import load_workbook
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func
 
-APP_DIR = Path(__file__).resolve().parent
-DATA_DIR = Path(os.environ.get("DATA_DIR", APP_DIR / "instance" / "data"))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave")
+app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
 
-BASE_FILE = DATA_DIR / "base_atual.xlsx"
-META_FILE = DATA_DIR / "creditos_meta.json"
+db_url = os.environ.get("DATABASE_URL", "sqlite:///creditos.db")
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db = SQLAlchemy(app)
 
 ALLOWED_EXTENSIONS = {".xlsx", ".xlsm"}
 
-app = Flask(__name__, instance_relative_config=True)
-app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave-em-producao")
-app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
+class BaseMetadata(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    original_filename = db.Column(db.String(255), nullable=False)
+    updated_at = db.Column(db.String(30), nullable=False)
+    months_count = db.Column(db.Integer, nullable=False, default=0)
+    total_creditos = db.Column(db.Integer, nullable=False, default=0)
+
+class Credito(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    mes_index = db.Column(db.Integer, nullable=False)
+    mes_nome = db.Column(db.String(120), nullable=False, index=True)
+    recibo = db.Column(db.String(120), nullable=True, index=True)
+    empresa = db.Column(db.String(255), nullable=True, index=True)
+    documento = db.Column(db.String(30), nullable=True)
+    credito_count = db.Column(db.Integer, nullable=False, default=1)
+
+with app.app_context():
+    db.create_all()
 
 def allowed_file(filename: str) -> bool:
-    return Path(filename.lower()).suffix in ALLOWED_EXTENSIONS
+    return os.path.splitext(filename.lower())[1] in ALLOWED_EXTENSIONS
 
 def clean_cell(value):
     if value is None:
@@ -99,14 +121,14 @@ def detect_credit_status(row, status_idx_primary, status_idx_secondary):
         values.append(clean_cell(row[status_idx_secondary]).upper())
     return any(v == "NÃO REALIZADO" or v == "NAO REALIZADO" for v in values)
 
-def process_workbook(path: Path):
-    wb = load_workbook(path, data_only=True)
+def process_workbook(filepath):
+    wb = load_workbook(filepath, data_only=True)
     months = []
     total_creditos = 0
 
-    for ws in wb.worksheets:
+    for ws_idx, ws in enumerate(wb.worksheets, start=1):
         raw_rows = list(ws.iter_rows(values_only=True))
-        header, data, header_row_number = detect_header_and_rows(raw_rows)
+        header, data, _ = detect_header_and_rows(raw_rows)
         if not header:
             continue
 
@@ -135,38 +157,137 @@ def process_workbook(path: Path):
 
         creditos = list(grouped.values())
         creditos.sort(key=lambda x: (x["empresa"], x["recibo"]))
-        total_creditos += sum(item["credito_count"] for item in creditos)
+        mes_total = sum(item["credito_count"] for item in creditos)
+        total_creditos += mes_total
 
         months.append({
-            "sheet_name": ws.title,
-            "header_row_number": header_row_number,
-            "row_count": len([r for r in data if any(clean_cell(c) for c in r)]),
+            "mes_index": ws_idx,
+            "mes_nome": ws.title,
             "credito_receipts_count": len(creditos),
-            "credito_total_count": sum(item["credito_count"] for item in creditos),
+            "credito_total_count": mes_total,
             "creditos": creditos,
         })
 
-    return {
-        "filename": path.name,
-        "original_filename": path.name,
-        "updated_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        "sheet_count": len(months),
-        "credito_total_count": total_creditos,
-        "months": months,
-    }
+    return months, total_creditos
 
-def save_meta(meta: dict):
-    META_FILE.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+def replace_database_with_planilha(filepath, original_filename):
+    months, total_creditos = process_workbook(filepath)
 
-def load_meta():
-    if not META_FILE.exists():
-        return None
-    return json.loads(META_FILE.read_text(encoding="utf-8"))
+    Credito.query.delete()
+    BaseMetadata.query.delete()
+
+    meta = BaseMetadata(
+        original_filename=original_filename,
+        updated_at=datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        months_count=len(months),
+        total_creditos=total_creditos,
+    )
+    db.session.add(meta)
+
+    for month in months:
+        for item in month["creditos"]:
+            db.session.add(Credito(
+                mes_index=month["mes_index"],
+                mes_nome=month["mes_nome"],
+                recibo=item["recibo"],
+                empresa=item["empresa"],
+                documento=item["documento"],
+                credito_count=item["credito_count"],
+            ))
+
+    db.session.commit()
+
+def get_dashboard_data(start_idx=None, end_idx=None, busca=""):
+    meta = BaseMetadata.query.order_by(BaseMetadata.id.desc()).first()
+
+    month_rows = (
+        db.session.query(
+            Credito.mes_index,
+            Credito.mes_nome,
+            func.count(Credito.id).label("credito_receipts_count"),
+            func.coalesce(func.sum(Credito.credito_count), 0).label("credito_total_count"),
+        )
+        .group_by(Credito.mes_index, Credito.mes_nome)
+        .order_by(Credito.mes_index.asc())
+        .all()
+    )
+
+    months_summary = []
+    for row in month_rows:
+        months_summary.append({
+            "mes_index": row.mes_index,
+            "mes_nome": row.mes_nome,
+            "credito_receipts_count": int(row.credito_receipts_count or 0),
+            "credito_total_count": int(row.credito_total_count or 0),
+        })
+
+    if months_summary:
+        min_idx = months_summary[0]["mes_index"]
+        max_idx = months_summary[-1]["mes_index"]
+    else:
+        min_idx = 1
+        max_idx = 1
+
+    if start_idx is None:
+        start_idx = min_idx
+    if end_idx is None:
+        end_idx = max_idx
+    if start_idx > end_idx:
+        start_idx, end_idx = end_idx, start_idx
+
+    q = Credito.query.filter(Credito.mes_index >= start_idx, Credito.mes_index <= end_idx)
+    busca = (busca or "").strip()
+    if busca:
+        term = f"%{busca}%"
+        q = q.filter(
+            db.or_(
+                Credito.mes_nome.ilike(term),
+                Credito.recibo.ilike(term),
+                Credito.empresa.ilike(term),
+                Credito.documento.ilike(term),
+            )
+        )
+
+    creditos = q.order_by(Credito.mes_index.asc(), Credito.empresa.asc(), Credito.recibo.asc()).all()
+
+    months_map = {m["mes_index"]: {**m, "creditos": []} for m in months_summary}
+    for c in creditos:
+        if c.mes_index in months_map:
+            months_map[c.mes_index]["creditos"].append(c)
+
+    months_filtered = [months_map[idx] for idx in sorted(months_map) if start_idx <= idx <= end_idx]
+    resumo_total = sum(m["credito_total_count"] for m in months_filtered)
+    resumo_recibos = sum(m["credito_receipts_count"] for m in months_filtered)
+
+    return meta, months_summary, months_filtered, resumo_total, resumo_recibos, min_idx, max_idx, start_idx, end_idx, busca
 
 @app.route("/")
 def index():
-    meta = load_meta()
-    return render_template("index.html", meta=meta)
+    try:
+        inicio = int(request.args.get("inicio", "0")) or None
+    except ValueError:
+        inicio = None
+    try:
+        fim = int(request.args.get("fim", "0")) or None
+    except ValueError:
+        fim = None
+    busca = request.args.get("busca", "")
+
+    meta, months_summary, months_filtered, resumo_total, resumo_recibos, min_idx, max_idx, start_idx, end_idx, busca = get_dashboard_data(inicio, fim, busca)
+
+    return render_template(
+        "index.html",
+        meta=meta,
+        months_summary=months_summary,
+        months_filtered=months_filtered,
+        resumo_total=resumo_total,
+        resumo_recibos=resumo_recibos,
+        min_idx=min_idx,
+        max_idx=max_idx,
+        inicio=start_idx,
+        fim=end_idx,
+        busca=busca,
+    )
 
 @app.route("/upload-base", methods=["POST"])
 def upload_base():
@@ -178,35 +299,24 @@ def upload_base():
         flash("Formato inválido. Envie apenas .xlsx ou .xlsm.")
         return redirect(url_for("index"))
 
-    temp_name = secure_filename(file.filename)
-    temp_path = DATA_DIR / f"_tmp_{temp_name}"
+    filename = secure_filename(file.filename)
+    temp_dir = os.environ.get("TMPDIR", "/tmp")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_path = os.path.join(temp_dir, filename)
     file.save(temp_path)
 
     try:
-        meta = process_workbook(temp_path)
+        replace_database_with_planilha(temp_path, file.filename)
+        flash("Base atualizada com sucesso.")
     except Exception as e:
-        temp_path.unlink(missing_ok=True)
         flash(f"Não foi possível ler a planilha: {e}")
-        return redirect(url_for("index"))
+    finally:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
 
-    BASE_FILE.unlink(missing_ok=True)
-    temp_path.replace(BASE_FILE)
-    meta["original_filename"] = file.filename
-    meta["filename"] = BASE_FILE.name
-    save_meta(meta)
-
-    flash("Base atualizada com sucesso.")
     return redirect(url_for("index"))
-
-@app.route("/mes/<sheet_name>")
-def view_month(sheet_name):
-    meta = load_meta()
-    if not meta:
-        abort(404)
-    month = next((m for m in meta["months"] if m["sheet_name"] == sheet_name), None)
-    if not month:
-        abort(404)
-    return render_template("month.html", meta=meta, month=month)
 
 @app.route("/healthz")
 def healthz():

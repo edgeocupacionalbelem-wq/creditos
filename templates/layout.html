@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="pt-br">
 <head>
@@ -18,12 +19,7 @@
       </div>
 
       <nav class="nav">
-        <a class="nav-link {{ 'active' if request.path == '/' else '' }}" href="{{ url_for('index') }}">Visão geral</a>
-        {% if meta and meta.months %}
-          {% for m in meta.months %}
-            <a class="nav-link {{ 'active' if request.path == url_for('view_month', sheet_name=m.sheet_name) else '' }}" href="{{ url_for('view_month', sheet_name=m.sheet_name) }}">{{ m.sheet_name }}</a>
-          {% endfor %}
-        {% endif %}
+        <a class="nav-link active" href="{{ url_for('index') }}">Dashboard</a>
       </nav>
     </aside>
 

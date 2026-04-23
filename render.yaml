@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: creditos-por-mes
+    name: creditos-db-dashboard
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -11,5 +11,11 @@ services:
         value: 3.11.9
       - key: SECRET_KEY
         generateValue: true
-      - key: DATA_DIR
-        value: /var/data
+      - key: DATABASE_URL
+        fromDatabase:
+          name: creditos-db
+          property: connectionString
+
+databases:
+  - name: creditos-db
+    plan: free
