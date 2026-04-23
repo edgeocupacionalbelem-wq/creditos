@@ -2,4 +2,4 @@ Flask==3.1.1
 Flask-SQLAlchemy==3.1.1
 gunicorn==23.0.0
 openpyxl==3.1.5
-psycopg[binary]==3.2.9
+psycopg2-binary==2.9.11

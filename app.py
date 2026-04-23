@@ -8,7 +8,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from werkzeug.utils import secure_filename
 from openpyxl import load_workbook
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave")
@@ -173,8 +173,8 @@ def process_workbook(filepath):
 def replace_database_with_planilha(filepath, original_filename):
     months, total_creditos = process_workbook(filepath)
 
-    Credito.query.delete()
-    BaseMetadata.query.delete()
+    db.session.query(Credito).delete()
+    db.session.query(BaseMetadata).delete()
 
     meta = BaseMetadata(
         original_filename=original_filename,
@@ -240,7 +240,7 @@ def get_dashboard_data(start_idx=None, end_idx=None, busca=""):
     if busca:
         term = f"%{busca}%"
         q = q.filter(
-            db.or_(
+            or_(
                 Credito.mes_nome.ilike(term),
                 Credito.recibo.ilike(term),
                 Credito.empresa.ilike(term),

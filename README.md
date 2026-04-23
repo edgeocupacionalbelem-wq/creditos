@@ -1,18 +1,15 @@
-# Dashboard de Créditos com Banco
+# Dashboard de Créditos com Banco - Corrigido
 
-## O que faz
-- alguém sobe a planilha uma vez
-- o sistema lê e salva os dados tratados no banco
-- qualquer pessoa que entrar depois já vê os dados sem reenviar a planilha
-- quando alguém subir outra planilha, os dados antigos são substituídos
-- todos os meses aparecem na mesma tela, organizados
-- o usuário pode escolher intervalo de abas para revisar
+## Correções desta versão
+- Python travado em 3.11.9
+- driver do Postgres ajustado para psycopg2-binary
+- pronto para Render com Web Service + PostgreSQL
 
-## Regras
-- procura "NÃO REALIZADO" na coluna H ou D
-- usa recibo
-- usa Setor na coluna L para empresa e CNPJ/CPF
-- se houver mais de um crédito no mesmo recibo, mostra só uma linha com a quantidade
+## Como funciona
+- alguém sobe a planilha
+- os dados tratados ficam no banco
+- qualquer pessoa que entrar depois já vê tudo
+- quando outra planilha for enviada, a base antiga é substituída
 
-## Deploy no Render
-Este projeto já está pronto para Web Service + PostgreSQL.
+## Deploy
+Use este projeto no Render com um Web Service e um PostgreSQL.
