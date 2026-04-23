@@ -21,7 +21,7 @@ ALLOWED_EXTENSIONS = {".xlsx", ".xlsm"}
 
 app = Flask(__name__, instance_relative_config=True)
 app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave-em-producao")
-app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024  # 80MB
+app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
 
 
 def allowed_file(filename: str) -> bool:
@@ -71,33 +71,14 @@ def detect_header_and_rows(rows):
 
 def find_column_index(header, aliases, fallback_index=None):
     normalized = [normalize_header_name(c) for c in header]
-
     for alias in aliases:
         alias_norm = normalize_header_name(alias)
         for idx, col in enumerate(normalized):
             if alias_norm and alias_norm in col:
                 return idx
-
     if fallback_index is not None and fallback_index < len(header):
         return fallback_index
     return None
-
-
-def parse_setor(setor_text):
-    raw = clean_cell(setor_text)
-    if not raw:
-        return "", ""
-
-    # tenta CNPJ/CPF no final ou no meio
-    doc_match = re.search(r'(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{3}\.?\d{3}\.?\d{3}-?\d{2})', raw)
-    doc = doc_match.group(1) if doc_match else ""
-    doc = format_document(doc)
-
-    empresa = raw
-    if doc_match:
-        empresa = (raw[:doc_match.start()] + raw[doc_match.end():]).strip(" -–•|")
-    empresa = re.sub(r"\s+", " ", empresa).strip(" -–•|")
-    return empresa, doc
 
 
 def format_document(doc):
@@ -109,14 +90,27 @@ def format_document(doc):
     return clean_cell(doc)
 
 
-def detect_credit_status(row, status_idx_primary, status_idx_secondary):
-    values_to_check = []
-    if status_idx_primary is not None and status_idx_primary < len(row):
-        values_to_check.append(clean_cell(row[status_idx_primary]).upper())
-    if status_idx_secondary is not None and status_idx_secondary < len(row):
-        values_to_check.append(clean_cell(row[status_idx_secondary]).upper())
+def parse_setor(setor_text):
+    raw = clean_cell(setor_text)
+    if not raw:
+        return "", ""
+    doc_match = re.search(r'(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{3}\.?\d{3}\.?\d{3}-?\d{2})', raw)
+    doc = doc_match.group(1) if doc_match else ""
+    doc = format_document(doc)
+    empresa = raw
+    if doc_match:
+        empresa = (raw[:doc_match.start()] + raw[doc_match.end():]).strip(" -–•|")
+    empresa = re.sub(r"\s+", " ", empresa).strip(" -–•|")
+    return empresa, doc
 
-    return any(v == "NÃO REALIZADO" or v == "NAO REALIZADO" for v in values_to_check)
+
+def detect_credit_status(row, status_idx_primary, status_idx_secondary):
+    values = []
+    if status_idx_primary is not None and status_idx_primary < len(row):
+        values.append(clean_cell(row[status_idx_primary]).upper())
+    if status_idx_secondary is not None and status_idx_secondary < len(row):
+        values.append(clean_cell(row[status_idx_secondary]).upper())
+    return any(v == "NÃO REALIZADO" or v == "NAO REALIZADO" for v in values)
 
 
 def process_workbook(path: Path):
@@ -130,18 +124,16 @@ def process_workbook(path: Path):
         if not header:
             continue
 
-        # tenta achar por nome; senão usa os fallbacks do seu arquivo
-        recibo_idx = find_column_index(header, ["RECIBO", "NO RECIBO", "NUMERO RECIBO"], fallback_index=2)  # C
-        setor_idx = find_column_index(header, ["SETOR"], fallback_index=11)  # L
-        status_h_idx = 7 if len(header) > 7 else None  # H
-        status_d_idx = 3 if len(header) > 3 else None  # D
+        recibo_idx = find_column_index(header, ["RECIBO", "NO RECIBO", "NUMERO RECIBO"], fallback_index=2)
+        setor_idx = find_column_index(header, ["SETOR"], fallback_index=11)
+        status_h_idx = 7 if len(header) > 7 else None
+        status_d_idx = 3 if len(header) > 3 else None
 
         grouped = defaultdict(lambda: {"credito_count": 0, "recibo": "", "empresa": "", "documento": ""})
 
         for row in normalize_rows(data):
             if not any(row):
                 continue
-
             if not detect_credit_status(row, status_h_idx, status_d_idx):
                 continue
 
@@ -157,7 +149,6 @@ def process_workbook(path: Path):
 
         creditos = list(grouped.values())
         creditos.sort(key=lambda x: (x["empresa"], x["recibo"]))
-
         total_creditos += sum(item["credito_count"] for item in creditos)
 
         months.append({
@@ -169,7 +160,7 @@ def process_workbook(path: Path):
             "creditos": creditos,
         })
 
-    meta = {
+    return {
         "filename": path.name,
         "original_filename": path.name,
         "updated_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
@@ -177,7 +168,6 @@ def process_workbook(path: Path):
         "credito_total_count": total_creditos,
         "months": months,
     }
-    return meta
 
 
 def save_meta(meta: dict):
@@ -202,7 +192,6 @@ def upload_base():
     if not file or not file.filename:
         flash("Selecione uma planilha .xlsx ou .xlsm.")
         return redirect(url_for("index"))
-
     if not allowed_file(file.filename):
         flash("Formato inválido. Envie apenas .xlsx ou .xlsm.")
         return redirect(url_for("index"))
@@ -233,11 +222,9 @@ def view_month(sheet_name):
     meta = load_meta()
     if not meta:
         abort(404)
-
     month = next((m for m in meta["months"] if m["sheet_name"] == sheet_name), None)
     if not month:
         abort(404)
-
     return render_template("month.html", meta=meta, month=month)
 
 
