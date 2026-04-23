@@ -13,54 +13,32 @@
 
 <section class="stats">
   <div class="stat-card stat-upload">
-    <div class="panel-head panel-head-light">
-      <h2>Atualizar base</h2>
-    </div>
+    <div class="panel-head panel-head-light"><h2>Atualizar base</h2></div>
     <form class="upload-form" action="{{ url_for('upload_base') }}" method="post" enctype="multipart/form-data">
       <input type="file" name="base_file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
       <button type="submit">Enviar planilha</button>
     </form>
   </div>
-  <div class="stat-card">
-    <span>Última atualização</span>
-    <strong>{{ meta.updated_at if meta else "-" }}</strong>
-  </div>
-  <div class="stat-card highlight">
-    <span>Meses lidos</span>
-    <strong>{{ meta.months_count if meta else 0 }}</strong>
-  </div>
-  <div class="stat-card">
-    <span>Total de créditos</span>
-    <strong>{{ meta.total_creditos if meta else 0 }}</strong>
-  </div>
+  <div class="stat-card"><span>Última atualização</span><strong>{{ meta.updated_at if meta else "-" }}</strong></div>
+  <div class="stat-card highlight"><span>Meses lidos</span><strong>{{ meta.months_count if meta else 0 }}</strong></div>
+  <div class="stat-card"><span>Total de créditos</span><strong>{{ meta.total_creditos if meta else 0 }}</strong></div>
 </section>
 
 {% if meta %}
 <section class="stats stats-three">
   <div class="stat-card stat-upload">
-    <div class="panel-head panel-head-light">
-      <h2>Filtrar consulta</h2>
-    </div>
+    <div class="panel-head panel-head-light"><h2>Filtrar consulta</h2></div>
     <form class="interval-form" action="{{ url_for('index') }}" method="get">
       <div class="interval-grid">
         <label><span>Início</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="inicio" value="{{ inicio }}"></label>
         <label><span>Fim</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="fim" value="{{ fim }}"></label>
       </div>
-      <label class="search-box">
-        <span>Buscar</span>
-        <input type="text" name="busca" value="{{ busca }}" placeholder="Recibo, empresa, documento ou mês">
-      </label>
+      <label class="search-box"><span>Buscar</span><input type="text" name="busca" value="{{ busca }}" placeholder="Recibo, empresa, documento, PIX ou mês"></label>
       <button type="submit">Aplicar filtro</button>
     </form>
   </div>
-  <div class="stat-card">
-    <span>Recibos no intervalo</span>
-    <strong>{{ resumo_recibos }}</strong>
-  </div>
-  <div class="stat-card highlight">
-    <span>Créditos no intervalo</span>
-    <strong>{{ resumo_total }}</strong>
-  </div>
+  <div class="stat-card"><span>Recibos no intervalo</span><strong>{{ resumo_recibos }}</strong></div>
+  <div class="stat-card highlight"><span>Créditos no intervalo</span><strong>{{ resumo_total }}</strong></div>
 </section>
 
 <section class="panel">
@@ -88,10 +66,17 @@
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Recibo</th><th>Empresa</th><th>CNPJ/CPF</th><th>Qtd. de créditos no recibo</th></tr></thead>
+      <thead><tr><th>Recibo</th><th>Empresa</th><th>CNPJ/CPF</th><th>ID PIX</th><th>Info pagamento</th><th>Qtd. de créditos no recibo</th></tr></thead>
       <tbody>
         {% for item in month.creditos %}
-        <tr><td>{{ item.recibo }}</td><td>{{ item.empresa }}</td><td>{{ item.documento }}</td><td>{{ item.credito_count }}</td></tr>
+        <tr>
+          <td>{{ item.recibo }}</td>
+          <td class="wrap-cell">{{ item.empresa }}</td>
+          <td>{{ item.documento }}</td>
+          <td class="wrap-cell">{{ item.pix_id }}</td>
+          <td class="wrap-cell">{{ item.pagamento_info }}</td>
+          <td>{{ item.credito_count }}</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>

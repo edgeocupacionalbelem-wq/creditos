@@ -11,12 +11,7 @@
   --blue-soft:#e8f2ff;
 }
 *{box-sizing:border-box}
-body{
-  margin:0;
-  font-family:Inter,system-ui,sans-serif;
-  background:linear-gradient(180deg,#eef4fb,#e8eff8);
-  color:var(--text);
-}
+body{margin:0;font-family:Inter,system-ui,sans-serif;background:linear-gradient(180deg,#eef4fb,#e8eff8);color:var(--text)}
 .shell{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
 .sidebar{background:linear-gradient(180deg,var(--blue-dark),var(--blue-deeper));color:#fff;padding:24px 18px}
 .brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}
@@ -60,5 +55,6 @@ th{background:#eff5fd;color:#27496d;font-size:.92rem}
 .empty-state{text-align:center}
 .month-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .month-badges{display:flex;gap:10px;flex-wrap:wrap}
+td.wrap-cell{white-space:normal;min-width:220px;max-width:420px}
 @media (max-width:1080px){.stats,.stats-three{grid-template-columns:1fr 1fr}}
 @media (max-width:980px){.shell{grid-template-columns:1fr}.sidebar{display:none}.content{padding:16px}}

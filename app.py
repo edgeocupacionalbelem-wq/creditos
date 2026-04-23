@@ -8,7 +8,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, Res
 from werkzeug.utils import secure_filename
 from openpyxl import load_workbook
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave")
@@ -38,10 +38,22 @@ class Credito(db.Model):
     recibo = db.Column(db.String(120), nullable=True, index=True)
     empresa = db.Column(db.String(255), nullable=True, index=True)
     documento = db.Column(db.String(30), nullable=True)
+    pix_id = db.Column(db.String(255), nullable=True)
+    pagamento_info = db.Column(db.Text, nullable=True)
     credito_count = db.Column(db.Integer, nullable=False, default=1)
 
 with app.app_context():
     db.create_all()
+    try:
+        db.session.execute(text("ALTER TABLE credito ADD COLUMN pix_id VARCHAR(255)"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    try:
+        db.session.execute(text("ALTER TABLE credito ADD COLUMN pagamento_info TEXT"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 @app.after_request
 def add_no_cache_headers(response):
@@ -130,6 +142,12 @@ def detect_credit_status(row, status_idx_primary, status_idx_secondary):
         values.append(clean_cell(row[status_idx_secondary]).upper())
     return any(v == "NÃO REALIZADO" or v == "NAO REALIZADO" for v in values)
 
+def get_pix_col_index(mes_nome):
+    nome = clean_cell(mes_nome).upper()
+    if "JANEIRO" in nome:
+        return 7
+    return 1
+
 def process_workbook(filepath):
     wb = load_workbook(filepath, data_only=True)
     months = []
@@ -143,7 +161,9 @@ def process_workbook(filepath):
         setor_idx = find_column_index(header, ["SETOR"], fallback_index=11)
         status_h_idx = 7 if len(header) > 7 else None
         status_d_idx = 3 if len(header) > 3 else None
-        grouped = defaultdict(lambda: {"credito_count": 0, "recibo": "", "empresa": "", "documento": ""})
+        pix_idx = get_pix_col_index(ws.title)
+        pagamento_info_idx = 8 if len(header) > 8 else None
+        grouped = defaultdict(lambda: {"credito_count": 0, "recibo": "", "empresa": "", "documento": "", "pix_id": "", "pagamento_info": ""})
         for row in normalize_rows(data):
             if not any(row):
                 continue
@@ -151,69 +171,39 @@ def process_workbook(filepath):
                 continue
             recibo = clean_cell(row[recibo_idx]) if recibo_idx is not None and recibo_idx < len(row) else ""
             setor = clean_cell(row[setor_idx]) if setor_idx is not None and setor_idx < len(row) else ""
+            pix_id = clean_cell(row[pix_idx]) if pix_idx is not None and pix_idx < len(row) else ""
+            pagamento_info = clean_cell(row[pagamento_info_idx]) if pagamento_info_idx is not None and pagamento_info_idx < len(row) else ""
             empresa, documento = parse_setor(setor)
-            key = (recibo, empresa, documento)
+            key = (recibo, empresa, documento, pix_id, pagamento_info)
             grouped[key]["credito_count"] += 1
             grouped[key]["recibo"] = recibo
             grouped[key]["empresa"] = empresa
             grouped[key]["documento"] = documento
+            grouped[key]["pix_id"] = pix_id
+            grouped[key]["pagamento_info"] = pagamento_info
         creditos = list(grouped.values())
         creditos.sort(key=lambda x: (x["empresa"], x["recibo"]))
         mes_total = sum(item["credito_count"] for item in creditos)
         total_creditos += mes_total
-        months.append({
-            "mes_index": ws_idx,
-            "mes_nome": ws.title,
-            "credito_receipts_count": len(creditos),
-            "credito_total_count": mes_total,
-            "creditos": creditos,
-        })
+        months.append({"mes_index": ws_idx, "mes_nome": ws.title, "credito_receipts_count": len(creditos), "credito_total_count": mes_total, "creditos": creditos})
     return months, total_creditos
 
 def replace_database_with_planilha(filepath, original_filename):
     months, total_creditos = process_workbook(filepath)
     db.session.query(Credito).delete()
     db.session.query(BaseMetadata).delete()
-    db.session.add(BaseMetadata(
-        original_filename=original_filename,
-        updated_at=datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        months_count=len(months),
-        total_creditos=total_creditos,
-    ))
+    db.session.add(BaseMetadata(original_filename=original_filename, updated_at=datetime.now().strftime("%d/%m/%Y %H:%M:%S"), months_count=len(months), total_creditos=total_creditos))
     for month in months:
         for item in month["creditos"]:
-            db.session.add(Credito(
-                mes_index=month["mes_index"],
-                mes_nome=month["mes_nome"],
-                recibo=item["recibo"],
-                empresa=item["empresa"],
-                documento=item["documento"],
-                credito_count=item["credito_count"],
-            ))
+            db.session.add(Credito(mes_index=month["mes_index"], mes_nome=month["mes_nome"], recibo=item["recibo"], empresa=item["empresa"], documento=item["documento"], pix_id=item["pix_id"], pagamento_info=item["pagamento_info"], credito_count=item["credito_count"]))
     db.session.commit()
 
 def get_dashboard_data(start_idx=None, end_idx=None, busca=""):
     meta = BaseMetadata.query.order_by(BaseMetadata.id.desc()).first()
-    month_rows = (
-        db.session.query(
-            Credito.mes_index,
-            Credito.mes_nome,
-            func.count(Credito.id).label("credito_receipts_count"),
-            func.coalesce(func.sum(Credito.credito_count), 0).label("credito_total_count"),
-        )
-        .group_by(Credito.mes_index, Credito.mes_nome)
-        .order_by(Credito.mes_index.asc())
-        .all()
-    )
-    months_summary = [{
-        "mes_index": r.mes_index,
-        "mes_nome": r.mes_nome,
-        "credito_receipts_count": int(r.credito_receipts_count or 0),
-        "credito_total_count": int(r.credito_total_count or 0),
-    } for r in month_rows]
+    month_rows = db.session.query(Credito.mes_index, Credito.mes_nome, func.count(Credito.id).label("credito_receipts_count"), func.coalesce(func.sum(Credito.credito_count), 0).label("credito_total_count")).group_by(Credito.mes_index, Credito.mes_nome).order_by(Credito.mes_index.asc()).all()
+    months_summary = [{"mes_index": r.mes_index, "mes_nome": r.mes_nome, "credito_receipts_count": int(r.credito_receipts_count or 0), "credito_total_count": int(r.credito_total_count or 0)} for r in month_rows]
     if months_summary:
-        min_idx = months_summary[0]["mes_index"]
-        max_idx = months_summary[-1]["mes_index"]
+        min_idx = months_summary[0]["mes_index"]; max_idx = months_summary[-1]["mes_index"]
     else:
         min_idx = max_idx = 1
     if start_idx is None: start_idx = min_idx
@@ -223,7 +213,7 @@ def get_dashboard_data(start_idx=None, end_idx=None, busca=""):
     busca = (busca or "").strip()
     if busca:
         term = f"%{busca}%"
-        q = q.filter(or_(Credito.mes_nome.ilike(term), Credito.recibo.ilike(term), Credito.empresa.ilike(term), Credito.documento.ilike(term)))
+        q = q.filter(or_(Credito.mes_nome.ilike(term), Credito.recibo.ilike(term), Credito.empresa.ilike(term), Credito.documento.ilike(term), Credito.pix_id.ilike(term), Credito.pagamento_info.ilike(term)))
     creditos = q.order_by(Credito.mes_index.asc(), Credito.empresa.asc(), Credito.recibo.asc()).all()
     months_map = {m["mes_index"]: {**m, "creditos": []} for m in months_summary}
     for c in creditos:
@@ -245,8 +235,11 @@ def index():
     except ValueError:
         fim = None
     busca = request.args.get("busca", "")
+    css_path = os.path.join(app.static_folder, "styles.css")
+    with open(css_path, encoding="utf-8") as f:
+        inline_css = f.read()
     meta, months_summary, months_filtered, resumo_total, resumo_recibos, min_idx, max_idx, start_idx, end_idx, busca = get_dashboard_data(inicio, fim, busca)
-    return render_template("index.html", meta=meta, months_summary=months_summary, months_filtered=months_filtered, resumo_total=resumo_total, resumo_recibos=resumo_recibos, min_idx=min_idx, max_idx=max_idx, inicio=start_idx, fim=end_idx, busca=busca, inline_css=open(os.path.join(app.static_folder, "styles.css"), encoding="utf-8").read())
+    return render_template("index.html", meta=meta, months_summary=months_summary, months_filtered=months_filtered, resumo_total=resumo_total, resumo_recibos=resumo_recibos, min_idx=min_idx, max_idx=max_idx, inicio=start_idx, fim=end_idx, busca=busca, inline_css=inline_css)
 
 @app.route("/upload-base", methods=["POST"])
 def upload_base():
@@ -268,10 +261,8 @@ def upload_base():
     except Exception as e:
         flash(f"Não foi possível ler a planilha: {e}")
     finally:
-        try:
-            os.remove(temp_path)
-        except OSError:
-            pass
+        try: os.remove(temp_path)
+        except OSError: pass
     return redirect(url_for("index"))
 
 @app.route("/healthz")
