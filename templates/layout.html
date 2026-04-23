@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="pt-br">
 <head>
@@ -15,17 +14,14 @@
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-badge">CR</div>
-        <div>
-          <div class="brand-title">Créditos por Mês</div>
-        </div>
+        <div class="brand-title">Créditos por Mês</div>
       </div>
 
       <nav class="nav">
         <a class="nav-link {{ 'active' if request.path == '/' else '' }}" href="{{ url_for('index') }}">Visão geral</a>
         {% if meta and meta.months %}
           {% for m in meta.months %}
-            <a class="nav-link {{ 'active' if request.path == url_for('view_month', sheet_name=m.sheet_name) else '' }}"
-               href="{{ url_for('view_month', sheet_name=m.sheet_name) }}">{{ m.sheet_name }}</a>
+            <a class="nav-link {{ 'active' if request.path == url_for('view_month', sheet_name=m.sheet_name) else '' }}" href="{{ url_for('view_month', sheet_name=m.sheet_name) }}">{{ m.sheet_name }}</a>
           {% endfor %}
         {% endif %}
       </nav>

@@ -1,4 +1,3 @@
-
 import json
 import os
 import re
@@ -23,20 +22,16 @@ app = Flask(__name__, instance_relative_config=True)
 app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave-em-producao")
 app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
 
-
 def allowed_file(filename: str) -> bool:
     return Path(filename.lower()).suffix in ALLOWED_EXTENSIONS
-
 
 def clean_cell(value):
     if value is None:
         return ""
     return str(value).strip()
 
-
 def normalize_rows(rows):
     return [[clean_cell(v) for v in row] for row in rows]
-
 
 def normalize_header_name(text: str) -> str:
     t = clean_cell(text).upper()
@@ -45,12 +40,10 @@ def normalize_header_name(text: str) -> str:
     t = re.sub(r"\s+", " ", t).strip()
     return t
 
-
 def detect_header_and_rows(rows):
     rows = normalize_rows(rows)
     best_idx = 0
     best_score = -1
-
     for idx, row in enumerate(rows[:15]):
         normalized = [normalize_header_name(c) for c in row]
         keywords = ["RECIBO", "SETOR", "STATUS", "EXAME", "FUNCIONARIO", "DATA", "TIPO"]
@@ -60,14 +53,11 @@ def detect_header_and_rows(rows):
         if score > best_score:
             best_score = score
             best_idx = idx
-
     header = rows[best_idx] if rows else []
     data = rows[best_idx + 1:] if best_idx + 1 < len(rows) else []
     while data and not any(data[-1]):
         data.pop()
-
     return header, data, best_idx + 1
-
 
 def find_column_index(header, aliases, fallback_index=None):
     normalized = [normalize_header_name(c) for c in header]
@@ -80,7 +70,6 @@ def find_column_index(header, aliases, fallback_index=None):
         return fallback_index
     return None
 
-
 def format_document(doc):
     digits = re.sub(r"\D", "", doc or "")
     if len(digits) == 14:
@@ -88,7 +77,6 @@ def format_document(doc):
     if len(digits) == 11:
         return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
     return clean_cell(doc)
-
 
 def parse_setor(setor_text):
     raw = clean_cell(setor_text)
@@ -103,7 +91,6 @@ def parse_setor(setor_text):
     empresa = re.sub(r"\s+", " ", empresa).strip(" -–•|")
     return empresa, doc
 
-
 def detect_credit_status(row, status_idx_primary, status_idx_secondary):
     values = []
     if status_idx_primary is not None and status_idx_primary < len(row):
@@ -111,7 +98,6 @@ def detect_credit_status(row, status_idx_primary, status_idx_secondary):
     if status_idx_secondary is not None and status_idx_secondary < len(row):
         values.append(clean_cell(row[status_idx_secondary]).upper())
     return any(v == "NÃO REALIZADO" or v == "NAO REALIZADO" for v in values)
-
 
 def process_workbook(path: Path):
     wb = load_workbook(path, data_only=True)
@@ -169,22 +155,18 @@ def process_workbook(path: Path):
         "months": months,
     }
 
-
 def save_meta(meta: dict):
     META_FILE.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-
 
 def load_meta():
     if not META_FILE.exists():
         return None
     return json.loads(META_FILE.read_text(encoding="utf-8"))
 
-
 @app.route("/")
 def index():
     meta = load_meta()
     return render_template("index.html", meta=meta)
-
 
 @app.route("/upload-base", methods=["POST"])
 def upload_base():
@@ -216,7 +198,6 @@ def upload_base():
     flash("Base atualizada com sucesso.")
     return redirect(url_for("index"))
 
-
 @app.route("/mes/<sheet_name>")
 def view_month(sheet_name):
     meta = load_meta()
@@ -226,7 +207,6 @@ def view_month(sheet_name):
     if not month:
         abort(404)
     return render_template("month.html", meta=meta, month=month)
-
 
 @app.route("/healthz")
 def healthz():

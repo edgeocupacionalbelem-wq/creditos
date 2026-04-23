@@ -1,13 +1,25 @@
-
 {% extends "layout.html" %}
 {% set title = month.sheet_name %}
 {% block content %}
-<section class="panel">
-  <div class="panel-head">
-    <h2>{{ month.sheet_name }}</h2>
-    <p>{{ month.credito_receipts_count }} recibo(s) com crédito • {{ month.credito_total_count }} crédito(s) no total</p>
+<section class="hero hero-compact">
+  <div class="hero-top">
+    <h1>{{ month.sheet_name }}</h1>
+    <span class="badge-soft">{{ month.credito_total_count }} crédito(s)</span>
   </div>
+</section>
 
+<section class="stats stats-month">
+  <div class="stat-card">
+    <span>Recibos com crédito</span>
+    <strong>{{ month.credito_receipts_count }}</strong>
+  </div>
+  <div class="stat-card highlight">
+    <span>Total de créditos</span>
+    <strong>{{ month.credito_total_count }}</strong>
+  </div>
+</section>
+
+<section class="panel">
   <div class="table-wrap">
     <table>
       <thead>

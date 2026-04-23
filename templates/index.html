@@ -1,50 +1,44 @@
-
 {% extends "layout.html" %}
 {% set title = "Créditos por Mês" %}
 {% block content %}
-<section class="hero">
-  <div>
-    <h1>Suba a planilha base e veja os créditos de cada mês.</h1>
-    <p>O sistema procura <strong>NÃO REALIZADO</strong> nas colunas <strong>H</strong> ou <strong>D</strong>, agrupa por <strong>recibo</strong> e usa a coluna <strong>L (Setor)</strong> para mostrar empresa e CNPJ.</p>
+<section class="hero hero-compact">
+  <div class="hero-top">
+    <h1>Dashboard de Créditos</h1>
+    {% if meta %}
+      <span class="badge-soft">{{ meta.original_filename }}</span>
+    {% endif %}
   </div>
 </section>
 
-<section class="panel">
-  <div class="panel-head">
-    <h2>Enviar nova base</h2>
-    <p>Formatos aceitos: <strong>.xlsx</strong> e <strong>.xlsm</strong>.</p>
-  </div>
-
-  <form class="upload-form" action="{{ url_for('upload_base') }}" method="post" enctype="multipart/form-data">
-    <input type="file" name="base_file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
-    <button type="submit">Atualizar base global</button>
-  </form>
-</section>
-
-{% if meta %}
 <section class="stats">
-  <div class="stat-card">
-    <span>Arquivo ativo</span>
-    <strong>{{ meta.original_filename }}</strong>
+  <div class="stat-card stat-upload">
+    <div class="panel-head panel-head-light">
+      <h2>Atualizar base</h2>
+    </div>
+    <form class="upload-form" action="{{ url_for('upload_base') }}" method="post" enctype="multipart/form-data">
+      <input type="file" name="base_file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+      <button type="submit">Enviar planilha</button>
+    </form>
   </div>
+
   <div class="stat-card">
     <span>Última atualização</span>
-    <strong>{{ meta.updated_at }}</strong>
+    <strong>{{ meta.updated_at if meta else "-" }}</strong>
   </div>
-  <div class="stat-card">
+  <div class="stat-card highlight">
     <span>Meses lidos</span>
-    <strong>{{ meta.sheet_count }}</strong>
+    <strong>{{ meta.sheet_count if meta else 0 }}</strong>
   </div>
   <div class="stat-card">
     <span>Total de créditos</span>
-    <strong>{{ meta.credito_total_count }}</strong>
+    <strong>{{ meta.credito_total_count if meta else 0 }}</strong>
   </div>
 </section>
 
+{% if meta %}
 <section class="panel">
   <div class="panel-head">
     <h2>Resumo mensal</h2>
-    <p>Se houver mais de um crédito no mesmo recibo, o sistema mostra apenas uma linha para o recibo, com a quantidade de créditos.</p>
   </div>
 
   <div class="table-wrap">
@@ -73,7 +67,6 @@
 {% else %}
 <section class="panel empty-state">
   <h2>Nenhuma base ativa ainda</h2>
-  <p>Suba a primeira planilha para começar.</p>
 </section>
 {% endif %}
 {% endblock %}
