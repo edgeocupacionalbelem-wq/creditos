@@ -1,0 +1,80 @@
+
+{% extends "layout.html" %}
+{% set title = "Base Global" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <span class="eyebrow">Sem login • qualquer pessoa pode atualizar</span>
+    <h1>Suba uma nova planilha base e todos passam a ver os dados atualizados.</h1>
+    <p>O sistema mantém uma única base ativa. Ao subir outra planilha, ela substitui a anterior.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Enviar nova base</h2>
+    <p>Formatos aceitos: <strong>.xlsx</strong> e <strong>.xlsm</strong>.</p>
+  </div>
+
+  <form class="upload-form" action="{{ url_for('upload_base') }}" method="post" enctype="multipart/form-data">
+    <input type="file" name="base_file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+    <button type="submit">Atualizar base global</button>
+  </form>
+</section>
+
+{% if meta %}
+<section class="stats">
+  <div class="stat-card">
+    <span>Arquivo ativo</span>
+    <strong>{{ meta.original_filename }}</strong>
+  </div>
+  <div class="stat-card">
+    <span>Última atualização</span>
+    <strong>{{ meta.updated_at }}</strong>
+  </div>
+  <div class="stat-card">
+    <span>Abas lidas</span>
+    <strong>{{ meta.sheet_count }}</strong>
+  </div>
+  <div class="stat-card">
+    <span>Linhas encontradas</span>
+    <strong>{{ meta.total_rows }}</strong>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Resumo das abas</h2>
+    <p>Clique em uma aba na lateral para ver a prévia dos dados.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Aba</th>
+          <th>Linha do cabeçalho</th>
+          <th>Linhas de dados</th>
+          <th>Colunas detectadas</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in meta.sheets %}
+        <tr>
+          <td><a href="{{ url_for('view_sheet', sheet_name=s.name) }}">{{ s.name }}</a></td>
+          <td>{{ s.header_row_number }}</td>
+          <td>{{ s.row_count }}</td>
+          <td>{{ s.columns|length }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<section class="panel empty-state">
+  <h2>Nenhuma base ativa ainda</h2>
+  <p>Suba a primeira planilha para começar.</p>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,36 @@
+
+{% extends "layout.html" %}
+{% set title = sheet.name %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <h2>{{ sheet.name }}</h2>
+    <p>{{ sheet.row_count }} linha(s) de dados • cabeçalho detectado na linha {{ sheet.header_row_number }}</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          {% for col in sheet.columns %}
+            <th>{{ col or "Coluna" }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in sheet.preview_rows %}
+          <tr>
+            {% for cell in row %}
+              <td>{{ cell }}</td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if sheet.row_count > sheet.preview_rows|length %}
+    <p class="muted">Mostrando apenas as primeiras {{ sheet.preview_rows|length }} linhas para manter o site leve.</p>
+  {% endif %}
+</section>
+{% endblock %}

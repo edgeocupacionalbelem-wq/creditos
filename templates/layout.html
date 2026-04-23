@@ -1,0 +1,49 @@
+
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ title or "Base Global" }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-badge">BG</div>
+        <div>
+          <div class="brand-title">Base Global</div>
+          <div class="brand-sub">Planilha única compartilhada</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a class="nav-link {{ 'active' if request.path == '/' else '' }}" href="{{ url_for('index') }}">Visão geral</a>
+        {% if meta and meta.sheets %}
+          {% for s in meta.sheets %}
+            <a class="nav-link {{ 'active' if request.path == url_for('view_sheet', sheet_name=s.name) else '' }}"
+               href="{{ url_for('view_sheet', sheet_name=s.name) }}">{{ s.name }}</a>
+          {% endfor %}
+        {% endif %}
+      </nav>
+    </aside>
+
+    <main class="content">
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div class="flash-wrap">
+            {% for m in messages %}
+              <div class="flash">{{ m }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>
