@@ -1,0 +1,38 @@
+
+{% extends "layout.html" %}
+{% set title = month.sheet_name %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <h2>{{ month.sheet_name }}</h2>
+    <p>{{ month.credito_receipts_count }} recibo(s) com crédito • {{ month.credito_total_count }} crédito(s) no total</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Recibo</th>
+          <th>Empresa</th>
+          <th>CNPJ/CPF</th>
+          <th>Qtd. de créditos no recibo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in month.creditos %}
+          <tr>
+            <td>{{ item.recibo }}</td>
+            <td>{{ item.empresa }}</td>
+            <td>{{ item.documento }}</td>
+            <td>{{ item.credito_count }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if not month.creditos %}
+    <p class="muted">Nenhum crédito encontrado neste mês.</p>
+  {% endif %}
+</section>
+{% endblock %}

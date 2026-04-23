@@ -2,6 +2,7 @@
 import json
 import os
 import re
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -14,7 +15,7 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", APP_DIR / "instance" / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 BASE_FILE = DATA_DIR / "base_atual.xlsx"
-META_FILE = DATA_DIR / "base_meta.json"
+META_FILE = DATA_DIR / "creditos_meta.json"
 
 ALLOWED_EXTENSIONS = {".xlsx", ".xlsm"}
 
@@ -34,10 +35,15 @@ def clean_cell(value):
 
 
 def normalize_rows(rows):
-    cleaned = []
-    for row in rows:
-        cleaned.append([clean_cell(v) for v in row])
-    return cleaned
+    return [[clean_cell(v) for v in row] for row in rows]
+
+
+def normalize_header_name(text: str) -> str:
+    t = clean_cell(text).upper()
+    t = t.replace("Nº", "NO").replace("N°", "NO")
+    t = re.sub(r"[^A-Z0-9 ]+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
 
 
 def detect_header_and_rows(rows):
@@ -46,58 +52,130 @@ def detect_header_and_rows(rows):
     best_score = -1
 
     for idx, row in enumerate(rows[:15]):
+        normalized = [normalize_header_name(c) for c in row]
+        keywords = ["RECIBO", "SETOR", "STATUS", "EXAME", "FUNCIONARIO", "DATA", "TIPO"]
+        keyword_hits = sum(1 for c in normalized if any(k in c for k in keywords))
         non_empty = sum(1 for c in row if c)
-        long_cells = sum(1 for c in row if len(c) > 2)
-        score = non_empty * 2 + long_cells
+        score = keyword_hits * 8 + non_empty
         if score > best_score:
             best_score = score
             best_idx = idx
 
     header = rows[best_idx] if rows else []
     data = rows[best_idx + 1:] if best_idx + 1 < len(rows) else []
-
     while data and not any(data[-1]):
         data.pop()
 
     return header, data, best_idx + 1
 
 
-def workbook_to_metadata(path: Path):
+def find_column_index(header, aliases, fallback_index=None):
+    normalized = [normalize_header_name(c) for c in header]
+
+    for alias in aliases:
+        alias_norm = normalize_header_name(alias)
+        for idx, col in enumerate(normalized):
+            if alias_norm and alias_norm in col:
+                return idx
+
+    if fallback_index is not None and fallback_index < len(header):
+        return fallback_index
+    return None
+
+
+def parse_setor(setor_text):
+    raw = clean_cell(setor_text)
+    if not raw:
+        return "", ""
+
+    # tenta CNPJ/CPF no final ou no meio
+    doc_match = re.search(r'(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{3}\.?\d{3}\.?\d{3}-?\d{2})', raw)
+    doc = doc_match.group(1) if doc_match else ""
+    doc = format_document(doc)
+
+    empresa = raw
+    if doc_match:
+        empresa = (raw[:doc_match.start()] + raw[doc_match.end():]).strip(" -–•|")
+    empresa = re.sub(r"\s+", " ", empresa).strip(" -–•|")
+    return empresa, doc
+
+
+def format_document(doc):
+    digits = re.sub(r"\D", "", doc or "")
+    if len(digits) == 14:
+        return f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
+    if len(digits) == 11:
+        return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+    return clean_cell(doc)
+
+
+def detect_credit_status(row, status_idx_primary, status_idx_secondary):
+    values_to_check = []
+    if status_idx_primary is not None and status_idx_primary < len(row):
+        values_to_check.append(clean_cell(row[status_idx_primary]).upper())
+    if status_idx_secondary is not None and status_idx_secondary < len(row):
+        values_to_check.append(clean_cell(row[status_idx_secondary]).upper())
+
+    return any(v == "NÃO REALIZADO" or v == "NAO REALIZADO" for v in values_to_check)
+
+
+def process_workbook(path: Path):
     wb = load_workbook(path, data_only=True)
-    sheets = []
-    total_rows = 0
-    total_cols = 0
+    months = []
+    total_creditos = 0
 
     for ws in wb.worksheets:
         raw_rows = list(ws.iter_rows(values_only=True))
         header, data, header_row_number = detect_header_and_rows(raw_rows)
+        if not header:
+            continue
 
-        non_empty_data = [row for row in data if any(cell for cell in row)]
-        preview = non_empty_data[:100]
+        # tenta achar por nome; senão usa os fallbacks do seu arquivo
+        recibo_idx = find_column_index(header, ["RECIBO", "NO RECIBO", "NUMERO RECIBO"], fallback_index=2)  # C
+        setor_idx = find_column_index(header, ["SETOR"], fallback_index=11)  # L
+        status_h_idx = 7 if len(header) > 7 else None  # H
+        status_d_idx = 3 if len(header) > 3 else None  # D
 
-        max_cols = max((len(header), *(len(r) for r in preview)), default=0)
-        header = header[:max_cols]
-        preview = [r[:max_cols] + [""] * (max_cols - len(r[:max_cols])) for r in preview]
+        grouped = defaultdict(lambda: {"credito_count": 0, "recibo": "", "empresa": "", "documento": ""})
 
-        total_rows += len(non_empty_data)
-        total_cols = max(total_cols, max_cols)
+        for row in normalize_rows(data):
+            if not any(row):
+                continue
 
-        sheets.append({
-            "name": ws.title,
+            if not detect_credit_status(row, status_h_idx, status_d_idx):
+                continue
+
+            recibo = clean_cell(row[recibo_idx]) if recibo_idx is not None and recibo_idx < len(row) else ""
+            setor = clean_cell(row[setor_idx]) if setor_idx is not None and setor_idx < len(row) else ""
+            empresa, documento = parse_setor(setor)
+
+            key = (recibo, empresa, documento)
+            grouped[key]["credito_count"] += 1
+            grouped[key]["recibo"] = recibo
+            grouped[key]["empresa"] = empresa
+            grouped[key]["documento"] = documento
+
+        creditos = list(grouped.values())
+        creditos.sort(key=lambda x: (x["empresa"], x["recibo"]))
+
+        total_creditos += sum(item["credito_count"] for item in creditos)
+
+        months.append({
+            "sheet_name": ws.title,
             "header_row_number": header_row_number,
-            "columns": header,
-            "row_count": len(non_empty_data),
-            "preview_rows": preview,
+            "row_count": len([r for r in data if any(clean_cell(c) for c in r)]),
+            "credito_receipts_count": len(creditos),
+            "credito_total_count": sum(item["credito_count"] for item in creditos),
+            "creditos": creditos,
         })
 
     meta = {
         "filename": path.name,
         "original_filename": path.name,
         "updated_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        "sheet_count": len(sheets),
-        "total_rows": total_rows,
-        "max_columns": total_cols,
-        "sheets": sheets,
+        "sheet_count": len(months),
+        "credito_total_count": total_creditos,
+        "months": months,
     }
     return meta
 
@@ -134,7 +212,7 @@ def upload_base():
     file.save(temp_path)
 
     try:
-        meta = workbook_to_metadata(temp_path)
+        meta = process_workbook(temp_path)
     except Exception as e:
         temp_path.unlink(missing_ok=True)
         flash(f"Não foi possível ler a planilha: {e}")
@@ -150,17 +228,17 @@ def upload_base():
     return redirect(url_for("index"))
 
 
-@app.route("/sheet/<sheet_name>")
-def view_sheet(sheet_name):
+@app.route("/mes/<sheet_name>")
+def view_month(sheet_name):
     meta = load_meta()
     if not meta:
         abort(404)
 
-    sheet = next((s for s in meta["sheets"] if s["name"] == sheet_name), None)
-    if not sheet:
+    month = next((m for m in meta["months"] if m["sheet_name"] == sheet_name), None)
+    if not month:
         abort(404)
 
-    return render_template("sheet.html", meta=meta, sheet=sheet)
+    return render_template("month.html", meta=meta, month=month)
 
 
 @app.route("/healthz")

@@ -1,12 +1,12 @@
 
 {% extends "layout.html" %}
-{% set title = "Base Global" %}
+{% set title = "Créditos por Mês" %}
 {% block content %}
 <section class="hero">
   <div>
     <span class="eyebrow">Sem login • qualquer pessoa pode atualizar</span>
-    <h1>Suba uma nova planilha base e todos passam a ver os dados atualizados.</h1>
-    <p>O sistema mantém uma única base ativa. Ao subir outra planilha, ela substitui a anterior.</p>
+    <h1>Suba a planilha base e veja os créditos de cada mês.</h1>
+    <p>O sistema procura <strong>NÃO REALIZADO</strong> nas colunas <strong>H</strong> ou <strong>D</strong>, agrupa por <strong>recibo</strong> e usa a coluna <strong>L (Setor)</strong> para mostrar empresa e CNPJ.</p>
   </div>
 </section>
 
@@ -33,38 +33,38 @@
     <strong>{{ meta.updated_at }}</strong>
   </div>
   <div class="stat-card">
-    <span>Abas lidas</span>
+    <span>Meses lidos</span>
     <strong>{{ meta.sheet_count }}</strong>
   </div>
   <div class="stat-card">
-    <span>Linhas encontradas</span>
-    <strong>{{ meta.total_rows }}</strong>
+    <span>Total de créditos</span>
+    <strong>{{ meta.credito_total_count }}</strong>
   </div>
 </section>
 
 <section class="panel">
   <div class="panel-head">
-    <h2>Resumo das abas</h2>
-    <p>Clique em uma aba na lateral para ver a prévia dos dados.</p>
+    <h2>Resumo mensal</h2>
+    <p>Se houver mais de um crédito no mesmo recibo, o sistema mostra apenas a quantidade de créditos daquele recibo.</p>
   </div>
 
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th>Aba</th>
-          <th>Linha do cabeçalho</th>
-          <th>Linhas de dados</th>
-          <th>Colunas detectadas</th>
+          <th>Mês / Aba</th>
+          <th>Linhas analisadas</th>
+          <th>Recibos com crédito</th>
+          <th>Total de créditos</th>
         </tr>
       </thead>
       <tbody>
-        {% for s in meta.sheets %}
+        {% for m in meta.months %}
         <tr>
-          <td><a href="{{ url_for('view_sheet', sheet_name=s.name) }}">{{ s.name }}</a></td>
-          <td>{{ s.header_row_number }}</td>
-          <td>{{ s.row_count }}</td>
-          <td>{{ s.columns|length }}</td>
+          <td><a href="{{ url_for('view_month', sheet_name=m.sheet_name) }}">{{ m.sheet_name }}</a></td>
+          <td>{{ m.row_count }}</td>
+          <td>{{ m.credito_receipts_count }}</td>
+          <td>{{ m.credito_total_count }}</td>
         </tr>
         {% endfor %}
       </tbody>
