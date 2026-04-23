@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>{{ inline_css|safe }}</style>
 </head>
 <body>
   <div class="shell">
@@ -17,12 +17,10 @@
         <div class="brand-badge">CR</div>
         <div class="brand-title">Créditos por Mês</div>
       </div>
-
       <nav class="nav">
         <a class="nav-link active" href="{{ url_for('index') }}">Dashboard</a>
       </nav>
     </aside>
-
     <main class="content">
       {% with messages = get_flashed_messages() %}
         {% if messages %}

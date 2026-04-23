@@ -4,13 +4,13 @@ import re
 from collections import defaultdict
 from datetime import datetime
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, Response
 from werkzeug.utils import secure_filename
 from openpyxl import load_workbook
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, or_
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave")
 app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
 
@@ -22,7 +22,6 @@ app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
-
 ALLOWED_EXTENSIONS = {".xlsx", ".xlsm"}
 
 class BaseMetadata(db.Model):
@@ -43,6 +42,16 @@ class Credito(db.Model):
 
 with app.app_context():
     db.create_all()
+
+@app.after_request
+def add_no_cache_headers(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+@app.route("/favicon.ico")
+def favicon():
+    return Response(status=204)
 
 def allowed_file(filename: str) -> bool:
     return os.path.splitext(filename.lower())[1] in ALLOWED_EXTENSIONS
@@ -79,7 +88,7 @@ def detect_header_and_rows(rows):
     data = rows[best_idx + 1:] if best_idx + 1 < len(rows) else []
     while data and not any(data[-1]):
         data.pop()
-    return header, data, best_idx + 1
+    return header, data
 
 def find_column_index(header, aliases, fallback_index=None):
     normalized = [normalize_header_name(c) for c in header]
@@ -125,41 +134,33 @@ def process_workbook(filepath):
     wb = load_workbook(filepath, data_only=True)
     months = []
     total_creditos = 0
-
     for ws_idx, ws in enumerate(wb.worksheets, start=1):
         raw_rows = list(ws.iter_rows(values_only=True))
-        header, data, _ = detect_header_and_rows(raw_rows)
+        header, data = detect_header_and_rows(raw_rows)
         if not header:
             continue
-
         recibo_idx = find_column_index(header, ["RECIBO", "NO RECIBO", "NUMERO RECIBO"], fallback_index=2)
         setor_idx = find_column_index(header, ["SETOR"], fallback_index=11)
         status_h_idx = 7 if len(header) > 7 else None
         status_d_idx = 3 if len(header) > 3 else None
-
         grouped = defaultdict(lambda: {"credito_count": 0, "recibo": "", "empresa": "", "documento": ""})
-
         for row in normalize_rows(data):
             if not any(row):
                 continue
             if not detect_credit_status(row, status_h_idx, status_d_idx):
                 continue
-
             recibo = clean_cell(row[recibo_idx]) if recibo_idx is not None and recibo_idx < len(row) else ""
             setor = clean_cell(row[setor_idx]) if setor_idx is not None and setor_idx < len(row) else ""
             empresa, documento = parse_setor(setor)
-
             key = (recibo, empresa, documento)
             grouped[key]["credito_count"] += 1
             grouped[key]["recibo"] = recibo
             grouped[key]["empresa"] = empresa
             grouped[key]["documento"] = documento
-
         creditos = list(grouped.values())
         creditos.sort(key=lambda x: (x["empresa"], x["recibo"]))
         mes_total = sum(item["credito_count"] for item in creditos)
         total_creditos += mes_total
-
         months.append({
             "mes_index": ws_idx,
             "mes_nome": ws.title,
@@ -167,23 +168,18 @@ def process_workbook(filepath):
             "credito_total_count": mes_total,
             "creditos": creditos,
         })
-
     return months, total_creditos
 
 def replace_database_with_planilha(filepath, original_filename):
     months, total_creditos = process_workbook(filepath)
-
     db.session.query(Credito).delete()
     db.session.query(BaseMetadata).delete()
-
-    meta = BaseMetadata(
+    db.session.add(BaseMetadata(
         original_filename=original_filename,
         updated_at=datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
         months_count=len(months),
         total_creditos=total_creditos,
-    )
-    db.session.add(meta)
-
+    ))
     for month in months:
         for item in month["creditos"]:
             db.session.add(Credito(
@@ -194,12 +190,10 @@ def replace_database_with_planilha(filepath, original_filename):
                 documento=item["documento"],
                 credito_count=item["credito_count"],
             ))
-
     db.session.commit()
 
 def get_dashboard_data(start_idx=None, end_idx=None, busca=""):
     meta = BaseMetadata.query.order_by(BaseMetadata.id.desc()).first()
-
     month_rows = (
         db.session.query(
             Credito.mes_index,
@@ -211,54 +205,33 @@ def get_dashboard_data(start_idx=None, end_idx=None, busca=""):
         .order_by(Credito.mes_index.asc())
         .all()
     )
-
-    months_summary = []
-    for row in month_rows:
-        months_summary.append({
-            "mes_index": row.mes_index,
-            "mes_nome": row.mes_nome,
-            "credito_receipts_count": int(row.credito_receipts_count or 0),
-            "credito_total_count": int(row.credito_total_count or 0),
-        })
-
+    months_summary = [{
+        "mes_index": r.mes_index,
+        "mes_nome": r.mes_nome,
+        "credito_receipts_count": int(r.credito_receipts_count or 0),
+        "credito_total_count": int(r.credito_total_count or 0),
+    } for r in month_rows]
     if months_summary:
         min_idx = months_summary[0]["mes_index"]
         max_idx = months_summary[-1]["mes_index"]
     else:
-        min_idx = 1
-        max_idx = 1
-
-    if start_idx is None:
-        start_idx = min_idx
-    if end_idx is None:
-        end_idx = max_idx
-    if start_idx > end_idx:
-        start_idx, end_idx = end_idx, start_idx
-
+        min_idx = max_idx = 1
+    if start_idx is None: start_idx = min_idx
+    if end_idx is None: end_idx = max_idx
+    if start_idx > end_idx: start_idx, end_idx = end_idx, start_idx
     q = Credito.query.filter(Credito.mes_index >= start_idx, Credito.mes_index <= end_idx)
     busca = (busca or "").strip()
     if busca:
         term = f"%{busca}%"
-        q = q.filter(
-            or_(
-                Credito.mes_nome.ilike(term),
-                Credito.recibo.ilike(term),
-                Credito.empresa.ilike(term),
-                Credito.documento.ilike(term),
-            )
-        )
-
+        q = q.filter(or_(Credito.mes_nome.ilike(term), Credito.recibo.ilike(term), Credito.empresa.ilike(term), Credito.documento.ilike(term)))
     creditos = q.order_by(Credito.mes_index.asc(), Credito.empresa.asc(), Credito.recibo.asc()).all()
-
     months_map = {m["mes_index"]: {**m, "creditos": []} for m in months_summary}
     for c in creditos:
         if c.mes_index in months_map:
             months_map[c.mes_index]["creditos"].append(c)
-
     months_filtered = [months_map[idx] for idx in sorted(months_map) if start_idx <= idx <= end_idx]
     resumo_total = sum(m["credito_total_count"] for m in months_filtered)
     resumo_recibos = sum(m["credito_receipts_count"] for m in months_filtered)
-
     return meta, months_summary, months_filtered, resumo_total, resumo_recibos, min_idx, max_idx, start_idx, end_idx, busca
 
 @app.route("/")
@@ -272,22 +245,8 @@ def index():
     except ValueError:
         fim = None
     busca = request.args.get("busca", "")
-
     meta, months_summary, months_filtered, resumo_total, resumo_recibos, min_idx, max_idx, start_idx, end_idx, busca = get_dashboard_data(inicio, fim, busca)
-
-    return render_template(
-        "index.html",
-        meta=meta,
-        months_summary=months_summary,
-        months_filtered=months_filtered,
-        resumo_total=resumo_total,
-        resumo_recibos=resumo_recibos,
-        min_idx=min_idx,
-        max_idx=max_idx,
-        inicio=start_idx,
-        fim=end_idx,
-        busca=busca,
-    )
+    return render_template("index.html", meta=meta, months_summary=months_summary, months_filtered=months_filtered, resumo_total=resumo_total, resumo_recibos=resumo_recibos, min_idx=min_idx, max_idx=max_idx, inicio=start_idx, fim=end_idx, busca=busca, inline_css=open(os.path.join(app.static_folder, "styles.css"), encoding="utf-8").read())
 
 @app.route("/upload-base", methods=["POST"])
 def upload_base():
@@ -298,13 +257,11 @@ def upload_base():
     if not allowed_file(file.filename):
         flash("Formato inválido. Envie apenas .xlsx ou .xlsm.")
         return redirect(url_for("index"))
-
     filename = secure_filename(file.filename)
     temp_dir = os.environ.get("TMPDIR", "/tmp")
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, filename)
     file.save(temp_path)
-
     try:
         replace_database_with_planilha(temp_path, file.filename)
         flash("Base atualizada com sucesso.")
@@ -315,9 +272,12 @@ def upload_base():
             os.remove(temp_path)
         except OSError:
             pass
-
     return redirect(url_for("index"))
 
 @app.route("/healthz")
 def healthz():
     return {"status": "ok"}
+
+@app.errorhandler(404)
+def not_found(_):
+    return redirect(url_for("index"))

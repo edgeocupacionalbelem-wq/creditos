@@ -21,7 +21,6 @@
       <button type="submit">Enviar planilha</button>
     </form>
   </div>
-
   <div class="stat-card">
     <span>Última atualização</span>
     <strong>{{ meta.updated_at if meta else "-" }}</strong>
@@ -44,14 +43,8 @@
     </div>
     <form class="interval-form" action="{{ url_for('index') }}" method="get">
       <div class="interval-grid">
-        <label>
-          <span>Início</span>
-          <input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="inicio" value="{{ inicio }}">
-        </label>
-        <label>
-          <span>Fim</span>
-          <input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="fim" value="{{ fim }}">
-        </label>
+        <label><span>Início</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="inicio" value="{{ inicio }}"></label>
+        <label><span>Fim</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="fim" value="{{ fim }}"></label>
       </div>
       <label class="search-box">
         <span>Buscar</span>
@@ -60,7 +53,6 @@
       <button type="submit">Aplicar filtro</button>
     </form>
   </div>
-
   <div class="stat-card">
     <span>Recibos no intervalo</span>
     <strong>{{ resumo_recibos }}</strong>
@@ -72,27 +64,13 @@
 </section>
 
 <section class="panel">
-  <div class="panel-head">
-    <h2>Resumo dos meses</h2>
-  </div>
+  <div class="panel-head"><h2>Resumo dos meses</h2></div>
   <div class="table-wrap">
     <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Mês / Aba</th>
-          <th>Recibos com crédito</th>
-          <th>Total de créditos</th>
-        </tr>
-      </thead>
+      <thead><tr><th>#</th><th>Mês / Aba</th><th>Recibos com crédito</th><th>Total de créditos</th></tr></thead>
       <tbody>
         {% for m in months_summary %}
-        <tr>
-          <td>{{ m.mes_index }}</td>
-          <td>{{ m.mes_nome }}</td>
-          <td>{{ m.credito_receipts_count }}</td>
-          <td>{{ m.credito_total_count }}</td>
-        </tr>
+        <tr><td>{{ m.mes_index }}</td><td>{{ m.mes_nome }}</td><td>{{ m.credito_receipts_count }}</td><td>{{ m.credito_total_count }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -108,38 +86,22 @@
       <span class="badge-soft dark">{{ month.credito_total_count }} crédito(s)</span>
     </div>
   </div>
-
   <div class="table-wrap">
     <table>
-      <thead>
-        <tr>
-          <th>Recibo</th>
-          <th>Empresa</th>
-          <th>CNPJ/CPF</th>
-          <th>Qtd. de créditos no recibo</th>
-        </tr>
-      </thead>
+      <thead><tr><th>Recibo</th><th>Empresa</th><th>CNPJ/CPF</th><th>Qtd. de créditos no recibo</th></tr></thead>
       <tbody>
         {% for item in month.creditos %}
-          <tr>
-            <td>{{ item.recibo }}</td>
-            <td>{{ item.empresa }}</td>
-            <td>{{ item.documento }}</td>
-            <td>{{ item.credito_count }}</td>
-          </tr>
+        <tr><td>{{ item.recibo }}</td><td>{{ item.empresa }}</td><td>{{ item.documento }}</td><td>{{ item.credito_count }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-
   {% if not month.creditos %}
     <p class="muted">Nenhum crédito encontrado neste mês nesse filtro.</p>
   {% endif %}
 </section>
 {% endfor %}
 {% else %}
-<section class="panel empty-state">
-  <h2>Nenhuma base ativa ainda</h2>
-</section>
+<section class="panel empty-state"><h2>Nenhuma base ativa ainda</h2></section>
 {% endif %}
 {% endblock %}
