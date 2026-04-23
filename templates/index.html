@@ -1,10 +1,131 @@
-{% extends "layout.html" %}{% set title = "Dashboard de Créditos" %}{% block content %}
-<section class="hero hero-compact"><div class="hero-top"><h1>Dashboard de Créditos</h1>{% if meta %}<span class="badge-soft">{{ meta.original_filename }}</span>{% endif %}</div></section>
-<section class="stats"><div class="stat-card stat-upload"><div class="panel-head panel-head-light"><h2>Atualizar base</h2></div><form class="upload-form" action="{{ url_for('upload_base') }}" method="post" enctype="multipart/form-data"><input type="file" name="base_file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required><button type="submit">Enviar planilha</button></form></div><div class="stat-card"><span>Última atualização</span><strong>{{ meta.updated_at if meta else "-" }}</strong></div><div class="stat-card highlight"><span>Meses lidos</span><strong>{{ meta.months_count if meta else 0 }}</strong></div><div class="stat-card"><span>Total de créditos</span><strong>{{ meta.total_creditos if meta else 0 }}</strong></div></section>
+
+{% extends "layout.html" %}
+{% set title = "Dashboard de Créditos" %}
+{% block content %}
+<section class="hero hero-compact">
+  <div class="hero-top">
+    <h1>Dashboard de Créditos</h1>
+    {% if meta %}
+      <span class="badge-soft">{{ meta.original_filename }}</span>
+    {% endif %}
+  </div>
+</section>
+
+<section class="stats">
+  <div class="stat-card stat-upload">
+    <div class="panel-head panel-head-light"><h2>Atualizar base</h2></div>
+    <form class="upload-form" action="{{ url_for('upload_base') }}" method="post" enctype="multipart/form-data">
+      <input type="file" name="base_file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+      <button type="submit">Enviar planilha</button>
+    </form>
+  </div>
+  <div class="stat-card"><span>Última atualização</span><strong>{{ meta.updated_at if meta else "-" }}</strong></div>
+  <div class="stat-card highlight"><span>Meses lidos</span><strong>{{ meta.months_count if meta else 0 }}</strong></div>
+  <div class="stat-card"><span>Total de créditos</span><strong>{{ meta.total_creditos if meta else 0 }}</strong></div>
+</section>
+
 {% if meta %}
-<section class="stats stats-three"><div class="stat-card stat-upload"><div class="panel-head panel-head-light"><h2>Filtrar consulta</h2></div><form class="interval-form" action="{{ url_for('index') }}" method="get"><div class="interval-grid"><label><span>Início</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="inicio" value="{{ inicio }}"></label><label><span>Fim</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="fim" value="{{ fim }}"></label></div><label class="search-box"><span>Buscar</span><input type="text" name="busca" value="{{ busca }}" placeholder="Recibo, empresa, documento, PIX ou mês"></label><button type="submit">Aplicar filtro</button></form></div><div class="stat-card"><span>Recibos no intervalo</span><strong>{{ resumo_recibos }}</strong></div><div class="stat-card highlight"><span>Créditos no intervalo</span><strong>{{ resumo_total }}</strong></div></section>
-<section class="panel"><div class="panel-head"><h2>Resumo dos meses</h2></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Mês / Aba</th><th>Recibos com crédito</th><th>Total de créditos</th></tr></thead><tbody>{% for m in months_summary %}<tr><td>{{ m.mes_index }}</td><td>{{ m.mes_nome }}</td><td>{{ m.credito_receipts_count }}</td><td>{{ m.credito_total_count }}</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="stats stats-three">
+  <div class="stat-card stat-upload">
+    <div class="panel-head panel-head-light"><h2>Filtrar consulta</h2></div>
+    <form class="interval-form" action="{{ url_for('index') }}" method="get">
+      <div class="interval-grid">
+        <label><span>Início</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="inicio" value="{{ inicio }}"></label>
+        <label><span>Fim</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="fim" value="{{ fim }}"></label>
+      </div>
+      <label class="search-box"><span>Buscar</span><input type="text" name="busca" value="{{ busca }}" placeholder="Recibo, empresa, documento, PIX ou mês"></label>
+      <button type="submit">Aplicar filtro</button>
+    </form>
+  </div>
+  <div class="stat-card"><span>Recibos no intervalo</span><strong>{{ resumo_recibos }}</strong></div>
+  <div class="stat-card highlight"><span>Créditos no intervalo</span><strong>{{ resumo_total }}</strong></div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>Resumo dos meses</h2></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Mês / Aba</th><th>Recibos com crédito</th><th>Total de créditos</th></tr></thead>
+      <tbody>
+        {% for m in months_summary %}
+        <tr><td>{{ m.mes_index }}</td><td>{{ m.mes_nome }}</td><td>{{ m.credito_receipts_count }}</td><td>{{ m.credito_total_count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
 {% for month in months_filtered %}
-<section class="panel month-panel"><div class="panel-head month-head"><h2>{{ month.mes_index }} - {{ month.mes_nome }}</h2><div class="month-badges"><span class="badge-soft">{{ month.credito_receipts_count }} recibo(s)</span><span class="badge-soft dark">{{ month.credito_total_count }} crédito(s)</span></div></div><div class="table-wrap"><table><thead><tr><th>Recibo</th><th>Empresa</th><th>CNPJ/CPF</th><th>ID PIX</th><th>Info pagamento</th><th>Qtd.</th><th>Comp. 1</th><th>Comp. 2</th></tr></thead><tbody>{% for item in month.creditos %}<tr><td>{{ item.recibo }}</td><td class="wrap-cell">{{ item.empresa }}</td><td>{{ item.documento }}</td><td class="wrap-cell">{{ item.pix_id }}</td><td class="wrap-cell">{{ item.pagamento_info }}</td><td>{{ item.credito_count }}</td>{% for slot in [1,2] %}{% set comp = item.comprovantes.get(slot) %}<td><div class="attach-box">{% if comp %}<div class="small">{{ comp.original_filename }}</div><div class="attach-actions"><a class="btn-link btn-muted" href="{{ comp.cloudinary_url }}" target="_blank">Ver</a><form action="{{ url_for('delete_comprovante', recibo=item.recibo, pix_id=item.pix_id, slot=slot) }}" method="post"><button type="submit" class="btn-danger">Apagar</button></form></div>{% else %}<div class="small">Sem arquivo</div>{% endif %}<form class="mini-upload" action="{{ url_for('upload_comprovante', recibo=item.recibo, pix_id=item.pix_id, slot=slot) }}" method="post" enctype="multipart/form-data"><input type="hidden" name="inicio" value="{{ inicio }}"><input type="hidden" name="fim" value="{{ fim }}"><input type="hidden" name="busca" value="{{ busca }}"><input type="file" name="arquivo" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/png,image/jpeg" required><button type="submit">Enviar</button></form></div></td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% if not month.creditos %}<p class="muted">Nenhum crédito encontrado neste mês nesse filtro.</p>{% endif %}</section>
-{% endfor %}{% else %}<section class="panel empty-state"><h2>Nenhuma base ativa ainda</h2></section>{% endif %}
+<section class="panel month-panel">
+  <div class="panel-head month-head">
+    <h2>{{ month.mes_index }} - {{ month.mes_nome }}</h2>
+    <div class="month-badges">
+      <span class="badge-soft">{{ month.credito_receipts_count }} recibo(s)</span>
+      <span class="badge-soft dark">{{ month.credito_total_count }} crédito(s)</span>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Recibo</th>
+          <th>Empresa</th>
+          <th>CNPJ/CPF</th>
+          <th>ID PIX</th>
+          <th>Info pagamento</th>
+          <th>Qtd.</th>
+          <th>Comp. 1</th>
+          <th>Comp. 2</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in month.creditos %}
+        <tr>
+          <td>{{ item.recibo }}</td>
+          <td class="wrap-cell">{{ item.empresa }}</td>
+          <td>{{ item.documento }}</td>
+          <td class="wrap-cell">{{ item.pix_id }}</td>
+          <td class="wrap-cell">{{ item.pagamento_info }}</td>
+          <td>{{ item.credito_count }}</td>
+          {% for slot in [1,2] %}
+          {% set comp = item.comprovantes.get(slot) %}
+          <td>
+            <div class="attach-box">
+              {% if comp %}
+                <div class="small">{{ comp.original_filename }}</div>
+                <div class="attach-actions">
+                  <a class="btn-link btn-muted" href="{{ comp.cloudinary_url }}" target="_blank">Ver</a>
+                  <form action="{{ url_for('delete_comprovante', recibo=item.recibo, pix_id=item.pix_id, slot=slot) }}" method="post">
+                    <input type="hidden" name="inicio" value="{{ inicio }}">
+                    <input type="hidden" name="fim" value="{{ fim }}">
+                    <input type="hidden" name="busca" value="{{ busca }}">
+                    <button type="submit" class="btn-danger">Apagar</button>
+                  </form>
+                </div>
+              {% else %}
+                <div class="small">Sem arquivo</div>
+              {% endif %}
+              <form class="mini-upload" action="{{ url_for('upload_comprovante', recibo=item.recibo, pix_id=item.pix_id, slot=slot) }}" method="post" enctype="multipart/form-data">
+                <input type="hidden" name="inicio" value="{{ inicio }}">
+                <input type="hidden" name="fim" value="{{ fim }}">
+                <input type="hidden" name="busca" value="{{ busca }}">
+                <input type="file" name="arquivo" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/png,image/jpeg" required>
+                <button type="submit">Enviar</button>
+              </form>
+            </div>
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not month.creditos %}
+    <p class="muted">Nenhum crédito encontrado neste mês nesse filtro.</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% else %}
+<section class="panel empty-state"><h2>Nenhuma base ativa ainda</h2></section>
+{% endif %}
 {% endblock %}
