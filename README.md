@@ -15,3 +15,11 @@ Melhorias desta versão:
 - O botão "Baixar" faz o download pelo próprio site.
 - PDFs são enviados para o Cloudinary como `raw`, evitando erro de abrir PDF como imagem.
 - Para PDFs antigos enviados antes desta correção, apague e envie novamente.
+
+
+## Versão profissional
+- visual mais profissional
+- filtros por nome do mês, status, empresa e busca geral
+- status visual dos comprovantes: Sem / Parcial / Completo
+- log de atualização
+- mantém dados no PostgreSQL e comprovantes no Cloudinary

@@ -2,18 +2,19 @@
 {% extends "layout.html" %}
 {% set title = "Dashboard de Créditos" %}
 {% block content %}
-<section class="hero hero-compact">
+<section class="hero">
   <div class="hero-top">
-    <h1>Dashboard de Créditos</h1>
-    {% if meta %}
-      <span class="badge-soft">{{ meta.original_filename }}</span>
-    {% endif %}
+    <div>
+      <h1>Dashboard de Créditos</h1>
+      <p>Consulta, comprovantes e status dos créditos em uma tela.</p>
+    </div>
+    {% if meta %}<span class="badge-soft">{{ meta.original_filename }}</span>{% endif %}
   </div>
 </section>
 
 <section class="stats">
   <div class="stat-card stat-upload">
-    <div class="panel-head panel-head-light"><h2>Atualizar base</h2></div>
+    <div class="panel-head-light"><h2>Atualizar base</h2></div>
     <form class="upload-form" action="{{ url_for('upload_base') }}" method="post" enctype="multipart/form-data">
       <input type="file" name="base_file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
       <button type="submit">Enviar planilha</button>
@@ -27,30 +28,69 @@
 {% if meta %}
 <section class="stats stats-three">
   <div class="stat-card stat-upload">
-    <div class="panel-head panel-head-light"><h2>Filtrar consulta</h2></div>
+    <div class="panel-head-light"><h2>Filtros inteligentes</h2></div>
     <form class="interval-form" action="{{ url_for('index') }}" method="get">
-      <div class="interval-grid">
-        <label><span>Início</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="inicio" value="{{ inicio }}"></label>
-        <label><span>Fim</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="fim" value="{{ fim }}"></label>
+      <div class="filter-grid">
+        <label>
+          <span>Mês</span>
+          <select name="mes">
+            <option value="">Todos os meses</option>
+            {% for m in months_summary %}
+              <option value="{{ m.mes_nome }}" {% if mes_nome == m.mes_nome %}selected{% endif %}>{{ m.mes_nome }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>Status</span>
+          <select name="status">
+            <option value="todos" {% if status_filtro == "todos" %}selected{% endif %}>Todos</option>
+            <option value="sem" {% if status_filtro == "sem" %}selected{% endif %}>Sem comprovante</option>
+            <option value="parcial" {% if status_filtro == "parcial" %}selected{% endif %}>Parcial</option>
+            <option value="completo" {% if status_filtro == "completo" %}selected{% endif %}>Completo</option>
+            <option value="com_algum" {% if status_filtro == "com_algum" %}selected{% endif %}>Com algum comprovante</option>
+          </select>
+        </label>
       </div>
-      <label class="search-box"><span>Buscar</span><input type="text" name="busca" value="{{ busca }}" placeholder="Recibo, empresa, documento, PIX ou mês"></label>
-      <button type="submit">Aplicar filtro</button>
+      <div class="filter-grid">
+        <label>
+          <span>Empresa</span>
+          <input type="text" name="empresa" value="{{ empresa_filtro }}" list="empresas-lista" placeholder="Digite parte do nome">
+          <datalist id="empresas-lista">{% for e in empresas %}<option value="{{ e }}">{% endfor %}</datalist>
+        </label>
+        <label><span>Busca geral</span><input type="text" name="busca" value="{{ busca }}" placeholder="Recibo, CNPJ, PIX, valor ou texto"></label>
+      </div>
+      <div class="filter-grid">
+        <label><span>Intervalo inicial</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="inicio" value="{{ inicio }}"></label>
+        <label><span>Intervalo final</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="fim" value="{{ fim }}"></label>
+      </div>
+      <button type="submit">Aplicar filtros</button>
     </form>
   </div>
-  <div class="stat-card"><span>Recibos no intervalo</span><strong>{{ resumo_recibos }}</strong></div>
-  <div class="stat-card highlight"><span>Créditos no intervalo</span><strong>{{ resumo_total }}</strong></div>
+  <div class="stat-card"><span>Recibos filtrados</span><strong>{{ resumo_recibos }}</strong></div>
+  <div class="stat-card highlight"><span>Créditos filtrados</span><strong>{{ resumo_total }}</strong></div>
+</section>
+
+<section class="stats stats-three">
+  <div class="stat-card"><span>Sem comprovante</span><strong>{{ total_sem_comprovante }}</strong></div>
+  <div class="stat-card"><span>Parcial</span><strong>{{ total_parcial }}</strong></div>
+  <div class="stat-card highlight"><span>Completo</span><strong>{{ total_com_comprovante }}</strong></div>
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2>Resumo dos meses</h2></div>
+  <div class="panel-head"><div><h2>Log de atualização</h2><p>Controle rápido do que está ativo no sistema.</p></div></div>
+  <div class="log-grid">
+    {% for log in logs %}
+      <div class="log-item"><strong>{{ log.titulo }}</strong><span>{{ log.descricao }}</span><br><span>{{ log.data }}</span></div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><div><h2>Resumo dos meses</h2><p>Visão geral por aba da planilha base.</p></div></div>
   <div class="table-wrap">
     <table>
       <thead><tr><th>#</th><th>Mês / Aba</th><th>Recibos com crédito</th><th>Total de créditos</th></tr></thead>
-      <tbody>
-        {% for m in months_summary %}
-        <tr><td>{{ m.mes_index }}</td><td>{{ m.mes_nome }}</td><td>{{ m.credito_receipts_count }}</td><td>{{ m.credito_total_count }}</td></tr>
-        {% endfor %}
-      </tbody>
+      <tbody>{% for m in months_summary %}<tr><td>{{ m.mes_index }}</td><td><strong>{{ m.mes_nome }}</strong></td><td>{{ m.credito_receipts_count }}</td><td>{{ m.credito_total_count }}</td></tr>{% endfor %}</tbody>
     </table>
   </div>
 </section>
@@ -58,35 +98,21 @@
 {% for month in months_filtered %}
 <section class="panel month-panel">
   <div class="panel-head month-head">
-    <h2>{{ month.mes_index }} - {{ month.mes_nome }}</h2>
-    <div class="month-badges">
-      <span class="badge-soft">{{ month.credito_receipts_count }} recibo(s)</span>
-      <span class="badge-soft dark">{{ month.credito_total_count }} crédito(s)</span>
-    </div>
+    <div><h2>{{ month.mes_nome }}</h2><p>{{ month.creditos|length }} registro(s) exibido(s) neste filtro.</p></div>
+    <div class="month-badges"><span class="badge-soft">{{ month.credito_receipts_count }} recibo(s)</span><span class="badge-soft badge-dark">{{ month.credito_total_count }} crédito(s)</span></div>
   </div>
   <div class="table-wrap">
     <table>
-      <thead>
-        <tr>
-          <th>Recibo</th>
-          <th>Empresa</th>
-          <th>CNPJ/CPF</th>
-          <th>ID PIX</th>
-          <th>Info pagamento</th>
-          <th>Qtd.</th>
-          <th>Comp. 1</th>
-          <th>Comp. 2</th>
-        </tr>
-      </thead>
+      <thead><tr><th>Status</th><th>Crédito</th><th>Empresa</th><th>ID PIX</th><th>Pagamento</th><th>Qtd.</th><th>Comp. 1</th><th>Comp. 2</th></tr></thead>
       <tbody>
         {% for item in month.creditos %}
         <tr>
-          <td>{{ item.recibo }}</td>
+          <td><span class="badge-status status-{{ item.status_comprovante }}">{% if item.status_comprovante == "completo" %}● Completo{% elif item.status_comprovante == "parcial" %}● Parcial{% else %}● Sem{% endif %}</span></td>
+          <td><div class="credit-title">Recibo {{ item.recibo }}</div><div class="credit-sub">{{ item.documento }}</div></td>
           <td class="wrap-cell">{{ item.empresa }}</td>
-          <td>{{ item.documento }}</td>
           <td class="wrap-cell">{{ item.pix_id }}</td>
           <td class="wrap-cell">{{ item.pagamento_info }}</td>
-          <td>{{ item.credito_count }}</td>
+          <td><strong>{{ item.credito_count }}</strong></td>
           {% for slot in [1,2] %}
           {% set comp = item.comprovantes.get(slot) %}
           <td>
@@ -97,21 +123,15 @@
                   <a class="btn-link btn-muted" href="{{ url_for('abrir_comprovante', comp_id=comp.id) }}" target="_blank">Ver</a>
                   <a class="btn-link" href="{{ url_for('download_comprovante', comp_id=comp.id) }}">Baixar</a>
                   <form action="{{ url_for('delete_comprovante', recibo=item.recibo, pix_id=item.pix_id, slot=slot) }}" method="post">
-                    <input type="hidden" name="inicio" value="{{ inicio }}">
-                    <input type="hidden" name="fim" value="{{ fim }}">
-                    <input type="hidden" name="busca" value="{{ busca }}">
+                    <input type="hidden" name="inicio" value="{{ inicio }}"><input type="hidden" name="fim" value="{{ fim }}"><input type="hidden" name="busca" value="{{ busca }}"><input type="hidden" name="mes" value="{{ mes_nome }}"><input type="hidden" name="empresa" value="{{ empresa_filtro }}"><input type="hidden" name="status" value="{{ status_filtro }}">
                     <button type="submit" class="btn-danger">Apagar</button>
                   </form>
                 </div>
-              {% else %}
-                <div class="small">Sem arquivo</div>
-              {% endif %}
+              {% else %}<div class="small">Sem arquivo</div>{% endif %}
               <form class="mini-upload" action="{{ url_for('upload_comprovante', recibo=item.recibo, pix_id=item.pix_id, slot=slot) }}" method="post" enctype="multipart/form-data">
-                <input type="hidden" name="inicio" value="{{ inicio }}">
-                <input type="hidden" name="fim" value="{{ fim }}">
-                <input type="hidden" name="busca" value="{{ busca }}">
+                <input type="hidden" name="inicio" value="{{ inicio }}"><input type="hidden" name="fim" value="{{ fim }}"><input type="hidden" name="busca" value="{{ busca }}"><input type="hidden" name="mes" value="{{ mes_nome }}"><input type="hidden" name="empresa" value="{{ empresa_filtro }}"><input type="hidden" name="status" value="{{ status_filtro }}">
                 <input type="file" name="arquivo" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/png,image/jpeg" required>
-                <button type="submit">Enviar</button>
+                <button type="submit">Anexar</button>
               </form>
             </div>
           </td>
@@ -121,9 +141,7 @@
       </tbody>
     </table>
   </div>
-  {% if not month.creditos %}
-    <p class="muted">Nenhum crédito encontrado neste mês nesse filtro.</p>
-  {% endif %}
+  {% if not month.creditos %}<p class="muted">Nenhum crédito encontrado neste mês nesse filtro.</p>{% endif %}
 </section>
 {% endfor %}
 {% else %}

@@ -276,40 +276,151 @@ def replace_database_with_planilha(filepath, original_filename):
     db.session.commit()
     cleanup_orphan_attachments(valid_keys)
 
-def get_dashboard_data(start_idx=None, end_idx=None, busca=""):
+
+def get_dashboard_data(start_idx=None, end_idx=None, busca="", mes_nome="", empresa_filtro="", status_filtro="todos"):
     meta = BaseMetadata.query.order_by(BaseMetadata.id.desc()).first()
+
     month_rows = db.session.query(
         Credito.mes_index,
         Credito.mes_nome,
         func.count(Credito.id).label("credito_receipts_count"),
         func.coalesce(func.sum(Credito.credito_count), 0).label("credito_total_count"),
     ).group_by(Credito.mes_index, Credito.mes_nome).order_by(Credito.mes_index.asc()).all()
-    months_summary = [{"mes_index": r.mes_index, "mes_nome": r.mes_nome, "credito_receipts_count": int(r.credito_receipts_count or 0), "credito_total_count": int(r.credito_total_count or 0)} for r in month_rows]
+
+    months_summary = [
+        {
+            "mes_index": r.mes_index,
+            "mes_nome": r.mes_nome,
+            "credito_receipts_count": int(r.credito_receipts_count or 0),
+            "credito_total_count": int(r.credito_total_count or 0),
+        }
+        for r in month_rows
+    ]
+
     if months_summary:
-        min_idx = months_summary[0]["mes_index"]; max_idx = months_summary[-1]["mes_index"]
+        min_idx = months_summary[0]["mes_index"]
+        max_idx = months_summary[-1]["mes_index"]
     else:
         min_idx = max_idx = 1
-    if start_idx is None: start_idx = min_idx
-    if end_idx is None: end_idx = max_idx
-    if start_idx > end_idx: start_idx, end_idx = end_idx, start_idx
+
+    mes_nome = (mes_nome or "").strip()
+    if mes_nome:
+        selected = next((m for m in months_summary if m["mes_nome"] == mes_nome), None)
+        if selected:
+            start_idx = selected["mes_index"]
+            end_idx = selected["mes_index"]
+
+    if start_idx is None:
+        start_idx = min_idx
+    if end_idx is None:
+        end_idx = max_idx
+    if start_idx > end_idx:
+        start_idx, end_idx = end_idx, start_idx
+
     q = Credito.query.filter(Credito.mes_index >= start_idx, Credito.mes_index <= end_idx)
+
     busca = (busca or "").strip()
     if busca:
         term = f"%{busca}%"
-        q = q.filter(or_(Credito.mes_nome.ilike(term), Credito.recibo.ilike(term), Credito.empresa.ilike(term), Credito.documento.ilike(term), Credito.pix_id.ilike(term), Credito.pagamento_info.ilike(term)))
+        q = q.filter(or_(
+            Credito.mes_nome.ilike(term),
+            Credito.recibo.ilike(term),
+            Credito.empresa.ilike(term),
+            Credito.documento.ilike(term),
+            Credito.pix_id.ilike(term),
+            Credito.pagamento_info.ilike(term),
+        ))
+
+    empresa_filtro = (empresa_filtro or "").strip()
+    if empresa_filtro:
+        q = q.filter(Credito.empresa.ilike(f"%{empresa_filtro}%"))
+
     creditos = q.order_by(Credito.mes_index.asc(), Credito.empresa.asc(), Credito.recibo.asc()).all()
+
     comp_map = {}
     for c in Comprovante.query.all():
         comp_map.setdefault(credito_key(c.recibo, c.pix_id), {})[c.slot] = c
+
     months_map = {m["mes_index"]: {**m, "creditos": []} for m in months_summary}
+    total_com_comprovante = 0
+    total_parcial = 0
+    total_sem_comprovante = 0
+
     for c in creditos:
         c.comprovantes = comp_map.get(credito_key(c.recibo, c.pix_id), {})
+        comp_count = len(c.comprovantes)
+        c.comprovante_count = comp_count
+
+        if comp_count >= 2:
+            c.status_comprovante = "completo"
+            c.status_label = "Completo"
+            total_com_comprovante += 1
+        elif comp_count == 1:
+            c.status_comprovante = "parcial"
+            c.status_label = "Parcial"
+            total_parcial += 1
+        else:
+            c.status_comprovante = "sem"
+            c.status_label = "Sem comprovante"
+            total_sem_comprovante += 1
+
+        if status_filtro == "completo" and comp_count < 2:
+            continue
+        if status_filtro == "parcial" and comp_count != 1:
+            continue
+        if status_filtro == "sem" and comp_count != 0:
+            continue
+        if status_filtro == "com_algum" and comp_count == 0:
+            continue
+
         if c.mes_index in months_map:
             months_map[c.mes_index]["creditos"].append(c)
+
     months_filtered = [months_map[idx] for idx in sorted(months_map) if start_idx <= idx <= end_idx]
-    resumo_total = sum(m["credito_total_count"] for m in months_filtered)
-    resumo_recibos = sum(m["credito_receipts_count"] for m in months_filtered)
-    return meta, months_summary, months_filtered, resumo_total, resumo_recibos, min_idx, max_idx, start_idx, end_idx, busca
+    resumo_total = sum(sum(c.credito_count for c in m["creditos"]) for m in months_filtered)
+    resumo_recibos = sum(len(m["creditos"]) for m in months_filtered)
+
+    empresas = [
+        row[0]
+        for row in db.session.query(Credito.empresa)
+        .filter(Credito.empresa.isnot(None), Credito.empresa != "")
+        .distinct()
+        .order_by(Credito.empresa.asc())
+        .all()
+    ]
+
+    logs = []
+    if meta:
+        logs.append({"titulo": "Base ativa", "descricao": meta.original_filename, "data": meta.updated_at})
+    ultimo_comprovante = Comprovante.query.order_by(Comprovante.id.desc()).first()
+    if ultimo_comprovante:
+        logs.append({
+            "titulo": "Último comprovante anexado",
+            "descricao": f"Recibo {ultimo_comprovante.recibo} • Slot {ultimo_comprovante.slot}",
+            "data": ultimo_comprovante.original_filename,
+        })
+
+    return {
+        "meta": meta,
+        "months_summary": months_summary,
+        "months_filtered": months_filtered,
+        "resumo_total": resumo_total,
+        "resumo_recibos": resumo_recibos,
+        "min_idx": min_idx,
+        "max_idx": max_idx,
+        "inicio": start_idx,
+        "fim": end_idx,
+        "busca": busca,
+        "mes_nome": mes_nome,
+        "empresa_filtro": empresa_filtro,
+        "status_filtro": status_filtro,
+        "empresas": empresas,
+        "logs": logs,
+        "total_com_comprovante": total_com_comprovante,
+        "total_parcial": total_parcial,
+        "total_sem_comprovante": total_sem_comprovante,
+    }
+
 
 @app.route("/")
 def index():
@@ -321,12 +432,26 @@ def index():
         fim = int(request.args.get("fim", "0")) or None
     except ValueError:
         fim = None
+
     busca = request.args.get("busca", "")
+    mes_nome = request.args.get("mes", "")
+    empresa_filtro = request.args.get("empresa", "")
+    status_filtro = request.args.get("status", "todos")
+
     css_path = os.path.join(app.static_folder, "styles.css")
     with open(css_path, encoding="utf-8") as f:
         inline_css = f.read()
-    meta, months_summary, months_filtered, resumo_total, resumo_recibos, min_idx, max_idx, start_idx, end_idx, busca = get_dashboard_data(inicio, fim, busca)
-    return render_template("index.html", meta=meta, months_summary=months_summary, months_filtered=months_filtered, resumo_total=resumo_total, resumo_recibos=resumo_recibos, min_idx=min_idx, max_idx=max_idx, inicio=start_idx, fim=end_idx, busca=busca, inline_css=inline_css)
+
+    data = get_dashboard_data(
+        start_idx=inicio,
+        end_idx=fim,
+        busca=busca,
+        mes_nome=mes_nome,
+        empresa_filtro=empresa_filtro,
+        status_filtro=status_filtro,
+    )
+    data["inline_css"] = inline_css
+    return render_template("index.html", **data)
 
 @app.route("/upload-base", methods=["POST"])
 def upload_base():
@@ -360,19 +485,22 @@ def upload_comprovante(recibo, pix_id, slot):
     inicio = request.form.get("inicio", "")
     fim = request.form.get("fim", "")
     busca = request.form.get("busca", "")
+    mes = request.form.get("mes", "")
+    empresa = request.form.get("empresa", "")
+    status = request.form.get("status", "todos")
     file = request.files.get("arquivo")
     if slot not in (1, 2):
         flash("Slot inválido.")
-        return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca))
+        return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca, mes=mes, empresa=empresa, status=status))
     if not file or not file.filename:
         flash("Selecione um comprovante.")
-        return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca))
+        return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca, mes=mes, empresa=empresa, status=status))
     if not attachment_allowed(file.filename):
         flash("Envie PDF, JPG, JPEG ou PNG.")
-        return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca))
+        return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca, mes=mes, empresa=empresa, status=status))
     if not cloudinary_ready():
         flash("Cloudinary não configurado no Render.")
-        return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca))
+        return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca, mes=mes, empresa=empresa, status=status))
     existing = Comprovante.query.filter_by(recibo=recibo, pix_id=pix_id, slot=slot).first()
     if existing:
         try:
@@ -418,13 +546,16 @@ def upload_comprovante(recibo, pix_id, slot):
     except Exception as e:
         db.session.rollback()
         flash(f"Falha ao enviar comprovante: {e}")
-    return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca))
+    return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca, mes=mes, empresa=empresa, status=status))
 
 @app.route("/delete-comprovante/<path:recibo>/<path:pix_id>/<int:slot>", methods=["POST"])
 def delete_comprovante(recibo, pix_id, slot):
     inicio = request.form.get("inicio", "")
     fim = request.form.get("fim", "")
     busca = request.form.get("busca", "")
+    mes = request.form.get("mes", "")
+    empresa = request.form.get("empresa", "")
+    status = request.form.get("status", "todos")
     comp = Comprovante.query.filter_by(recibo=recibo, pix_id=pix_id, slot=slot).first()
     if comp:
         if cloudinary_ready():
@@ -435,7 +566,7 @@ def delete_comprovante(recibo, pix_id, slot):
         db.session.delete(comp)
         db.session.commit()
         flash("Comprovante apagado.")
-    return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca))
+    return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca, mes=mes, empresa=empresa, status=status))
 
 
 @app.route("/download-comprovante/<int:comp_id>")
