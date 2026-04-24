@@ -29,3 +29,6 @@ Melhorias desta versão:
 - status simplificado: Sem comprovante / Com comprovante
 - qualquer comprovante anexado já deixa o crédito verde
 - mostra o nome do arquivo selecionado antes de anexar
+
+## Correção
+- Removido definitivamente o filtro por intervalo inicial/final da tela.

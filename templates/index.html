@@ -57,11 +57,7 @@
         </label>
         <label><span>Busca geral</span><input type="text" name="busca" value="{{ busca }}" placeholder="Recibo, CNPJ, PIX, valor ou texto"></label>
       </div>
-      <div class="filter-grid">
-        <label><span>Intervalo inicial</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="inicio" value="{{ inicio }}"></label>
-        <label><span>Intervalo final</span><input type="number" min="{{ min_idx }}" max="{{ max_idx }}" name="fim" value="{{ fim }}"></label>
-      </div>
-      <button type="submit">Aplicar filtros</button>
+<button type="submit">Aplicar filtros</button>
     </form>
   </div>
   <div class="stat-card"><span>Recibos filtrados</span><strong>{{ resumo_recibos }}</strong></div>
@@ -120,13 +116,13 @@
                   <a class="btn-link btn-muted" href="{{ url_for('abrir_comprovante', comp_id=comp.id) }}" target="_blank">Ver</a>
                   <a class="btn-link" href="{{ url_for('download_comprovante', comp_id=comp.id) }}">Baixar</a>
                   <form action="{{ url_for('delete_comprovante', recibo=item.recibo, pix_id=item.pix_id, slot=slot) }}" method="post">
-                    <input type="hidden" name="inicio" value="{{ inicio }}"><input type="hidden" name="fim" value="{{ fim }}"><input type="hidden" name="busca" value="{{ busca }}"><input type="hidden" name="mes" value="{{ mes_nome }}"><input type="hidden" name="empresa" value="{{ empresa_filtro }}"><input type="hidden" name="status" value="{{ status_filtro }}">
+                    <input type="hidden" name="busca" value="{{ busca }}"><input type="hidden" name="mes" value="{{ mes_nome }}"><input type="hidden" name="empresa" value="{{ empresa_filtro }}"><input type="hidden" name="status" value="{{ status_filtro }}">
                     <button type="submit" class="btn-danger">Apagar</button>
                   </form>
                 </div>
               {% else %}<div class="small">Sem arquivo</div>{% endif %}
               <form class="mini-upload" action="{{ url_for('upload_comprovante', recibo=item.recibo, pix_id=item.pix_id, slot=slot) }}" method="post" enctype="multipart/form-data">
-                <input type="hidden" name="inicio" value="{{ inicio }}"><input type="hidden" name="fim" value="{{ fim }}"><input type="hidden" name="busca" value="{{ busca }}"><input type="hidden" name="mes" value="{{ mes_nome }}"><input type="hidden" name="empresa" value="{{ empresa_filtro }}"><input type="hidden" name="status" value="{{ status_filtro }}">
+                <input type="hidden" name="busca" value="{{ busca }}"><input type="hidden" name="mes" value="{{ mes_nome }}"><input type="hidden" name="empresa" value="{{ empresa_filtro }}"><input type="hidden" name="status" value="{{ status_filtro }}">
                 <input class="file-input" type="file" name="arquivo" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/png,image/jpeg" required>
                 <div class="selected-file">Nenhum arquivo selecionado</div>
                 <button type="submit">Anexar</button>
