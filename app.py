@@ -2,11 +2,12 @@
 import os
 import re
 import zipfile
+import requests
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
 
-from flask import Flask, render_template, request, redirect, url_for, flash, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, send_file
 from werkzeug.utils import secure_filename
 from openpyxl import load_workbook
 from flask_sqlalchemy import SQLAlchemy
@@ -385,7 +386,11 @@ def upload_comprovante(recibo, pix_id, slot):
         is_pdf = ext == ".pdf"
         resource_type = "raw" if is_pdf else "image"
 
-        safe_public_base = re.sub(r"[^A-Za-z0-9_\\-]", "_", f"{clean_cell(recibo)}__{clean_cell(pix_id)}__slot{slot}")
+        safe_public_base = re.sub(
+            r"[^A-Za-z0-9_\\-]",
+            "_",
+            f"{clean_cell(recibo)}__{clean_cell(pix_id)}__slot{slot}"
+        )
         public_id = f"{safe_public_base}.pdf" if is_pdf else safe_public_base
 
         result = cloudinary.uploader.upload(
@@ -397,6 +402,7 @@ def upload_comprovante(recibo, pix_id, slot):
             use_filename=False,
             unique_filename=False,
         )
+
         comp = Comprovante(
             recibo=recibo,
             pix_id=pix_id,
@@ -430,6 +436,34 @@ def delete_comprovante(recibo, pix_id, slot):
         db.session.commit()
         flash("Comprovante apagado.")
     return redirect(url_for("index", inicio=inicio, fim=fim, busca=busca))
+
+
+@app.route("/download-comprovante/<int:comp_id>")
+def download_comprovante(comp_id):
+    comp = Comprovante.query.get_or_404(comp_id)
+    try:
+        r = requests.get(comp.cloudinary_url, timeout=30)
+        r.raise_for_status()
+        data = BytesIO(r.content)
+        data.seek(0)
+
+        filename = comp.original_filename or f"comprovante_{comp.recibo}_{comp.slot}"
+        mimetype = "application/pdf" if filename.lower().endswith(".pdf") else None
+
+        return send_file(
+            data,
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        flash(f"Não foi possível baixar o comprovante: {e}")
+        return redirect(url_for("index"))
+
+@app.route("/abrir-comprovante/<int:comp_id>")
+def abrir_comprovante(comp_id):
+    comp = Comprovante.query.get_or_404(comp_id)
+    return redirect(comp.cloudinary_url)
 
 @app.route("/healthz")
 def healthz():

@@ -4,3 +4,4 @@ gunicorn==23.0.0
 openpyxl==3.1.5
 psycopg2-binary==2.9.11
 cloudinary==1.41.0
+requests==2.32.3

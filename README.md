@@ -9,6 +9,9 @@ Melhorias desta versão:
 - até 2 comprovantes por crédito
 
 
-## Correção de PDF no Cloudinary
-Nesta versão, PDFs são enviados como `resource_type="raw"` e imagens como `resource_type="image"`.
-Isso evita o erro do navegador: "Falha ao carregar documento PDF" quando o arquivo PDF era entregue pela rota `/image/upload`.
+## Versão com download direto
+- Os dados da planilha ficam no PostgreSQL, então ninguém precisa reenviar planilha ao abrir o site.
+- Os comprovantes ficam no Cloudinary, então PDFs e imagens continuam salvos após deploy/restart.
+- O botão "Baixar" faz o download pelo próprio site.
+- PDFs são enviados para o Cloudinary como `raw`, evitando erro de abrir PDF como imagem.
+- Para PDFs antigos enviados antes desta correção, apague e envie novamente.
