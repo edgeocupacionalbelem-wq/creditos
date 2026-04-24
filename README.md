@@ -23,3 +23,9 @@ Melhorias desta versão:
 - status visual dos comprovantes: Sem / Parcial / Completo
 - log de atualização
 - mantém dados no PostgreSQL e comprovantes no Cloudinary
+
+## Ajuste de usabilidade
+- filtro por intervalo removido da tela
+- status simplificado: Sem comprovante / Com comprovante
+- qualquer comprovante anexado já deixa o crédito verde
+- mostra o nome do arquivo selecionado antes de anexar

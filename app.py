@@ -351,26 +351,18 @@ def get_dashboard_data(start_idx=None, end_idx=None, busca="", mes_nome="", empr
         comp_count = len(c.comprovantes)
         c.comprovante_count = comp_count
 
-        if comp_count >= 2:
+        if comp_count >= 1:
             c.status_comprovante = "completo"
-            c.status_label = "Completo"
+            c.status_label = "Com comprovante"
             total_com_comprovante += 1
-        elif comp_count == 1:
-            c.status_comprovante = "parcial"
-            c.status_label = "Parcial"
-            total_parcial += 1
         else:
             c.status_comprovante = "sem"
             c.status_label = "Sem comprovante"
             total_sem_comprovante += 1
 
-        if status_filtro == "completo" and comp_count < 2:
-            continue
-        if status_filtro == "parcial" and comp_count != 1:
+        if status_filtro == "completo" and comp_count == 0:
             continue
         if status_filtro == "sem" and comp_count != 0:
-            continue
-        if status_filtro == "com_algum" and comp_count == 0:
             continue
 
         if c.mes_index in months_map:
