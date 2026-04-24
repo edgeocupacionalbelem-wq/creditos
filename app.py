@@ -381,12 +381,21 @@ def upload_comprovante(recibo, pix_id, slot):
         db.session.delete(existing)
         db.session.commit()
     try:
+        ext = os.path.splitext(file.filename.lower())[1]
+        is_pdf = ext == ".pdf"
+        resource_type = "raw" if is_pdf else "image"
+
+        safe_public_base = re.sub(r"[^A-Za-z0-9_\\-]", "_", f"{clean_cell(recibo)}__{clean_cell(pix_id)}__slot{slot}")
+        public_id = f"{safe_public_base}.pdf" if is_pdf else safe_public_base
+
         result = cloudinary.uploader.upload(
             file,
             folder="creditos_comprovantes",
-            resource_type="auto",
-            public_id=f"{clean_cell(recibo)}__{clean_cell(pix_id)}__slot{slot}",
+            resource_type=resource_type,
+            public_id=public_id,
             overwrite=True,
+            use_filename=False,
+            unique_filename=False,
         )
         comp = Comprovante(
             recibo=recibo,
@@ -395,7 +404,7 @@ def upload_comprovante(recibo, pix_id, slot):
             original_filename=file.filename,
             cloudinary_url=result.get("secure_url") or result.get("url"),
             cloudinary_public_id=result["public_id"],
-            resource_type=result.get("resource_type", "auto"),
+            resource_type=result.get("resource_type", resource_type),
         )
         db.session.add(comp)
         db.session.commit()
